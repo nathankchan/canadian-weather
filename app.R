@@ -16,7 +16,7 @@ library(shiny)
 # install.packages(needed_packages)
 # lapply(required_packages, require, character.only = TRUE)
 
-# data_all <- read_csv(file = "./processeddata/ONTARIO.csv.gz")
+station_data <- readRDS("data/station_data.rds")
 
 # Code for testing...
 
@@ -45,21 +45,36 @@ ui <- fluidPage(
       selectInput(inputId = "station",
                   label = "Choose station to display",
                   choices = list(
-                    "ALBERTA | CALGARY INTL A" = "ALBERTA.csv.gz",
-                    "BRITISH COLUMBIA | VANCOUVER INTL A" = "BRITISH COLUMBIA.csv.gz",
-                    "MANITOBA | WINNIPEG INTL A" = "MANITOBA.csv.gz",
-                    "NEW BRUNSWICK | MONCTON/GREATER MONCTON ROMEO LEBLANC INTL A" = "NEW BRUNSWICK.csv.gz",
-                    "NEWFOUNDLAND | ST. JOHN'S INTL A" = "NEWFOUNDLAND.csv.gz",
-                    "NORTHWEST TERRITORIES | YELLOWKNIFE A" = "NORTHWEST TERRITORIES.csv.gz",
-                    "NOVA SCOTIA | HALIFAX STANFIELD INT'L A" = "NOVA SCOTIA.csv.gz",
-                    "NUNAVUT | IQALUIT A" = "NUNAVUT.csv.gz",
-                    "ONTARIO | TORONTO INTL A" = "ONTARIO.csv.gz",
-                    "PRINCE EDWARD ISLAND | CHARLOTTETOWN A" = "PRINCE EDWARD ISLAND.csv.gz",
-                    "QUEBEC | MONTREAL INTL A" = "QUEBEC.csv.gz",
-                    "SASKATCHEWAN | SASKATOON INTL A" = "SASKATCHEWAN.csv.gz",
-                    "YUKON TERRITORY| WHITEHORSE A" = "YUKON TERRITORY.csv.gz"
+                    # "ALBERTA | CALGARY INTL A" = "ALBERTA.csv.gz",
+                    # "BRITISH COLUMBIA | VANCOUVER INTL A" = "BRITISH COLUMBIA.csv.gz",
+                    # "MANITOBA | WINNIPEG INTL A" = "MANITOBA.csv.gz",
+                    # "NEW BRUNSWICK | MONCTON/GREATER MONCTON ROMEO LEBLANC INTL A" = "NEW BRUNSWICK.csv.gz",
+                    # "NEWFOUNDLAND | ST. JOHN'S INTL A" = "NEWFOUNDLAND.csv.gz",
+                    # "NORTHWEST TERRITORIES | YELLOWKNIFE A" = "NORTHWEST TERRITORIES.csv.gz",
+                    # "NOVA SCOTIA | HALIFAX STANFIELD INT'L A" = "NOVA SCOTIA.csv.gz",
+                    # "NUNAVUT | IQALUIT A" = "NUNAVUT.csv.gz",
+                    # "ONTARIO | TORONTO INTL A" = "ONTARIO.csv.gz",
+                    # "PRINCE EDWARD ISLAND | CHARLOTTETOWN A" = "PRINCE EDWARD ISLAND.csv.gz",
+                    # "QUEBEC | MONTREAL INTL A" = "QUEBEC.csv.gz",
+                    # "SASKATCHEWAN | SASKATOON INTL A" = "SASKATCHEWAN.csv.gz",
+                    # "YUKON TERRITORY | WHITEHORSE A" = "YUKON TERRITORY.csv.gz"
+                    
+                    "ALBERTA | CALGARY INTL A" = "ALBERTA",
+                    "BRITISH COLUMBIA | VANCOUVER INTL A" = "BRITISH COLUMBIA",
+                    "MANITOBA | WINNIPEG INTL A" = "MANITOBA",
+                    "NEW BRUNSWICK | MONCTON/GREATER MONCTON ROMEO LEBLANC INTL A" = "NEW BRUNSWICK",
+                    "NEWFOUNDLAND | ST. JOHN'S INTL A" = "NEWFOUNDLAND",
+                    "NORTHWEST TERRITORIES | YELLOWKNIFE A" = "NORTHWEST TERRITORIES",
+                    "NOVA SCOTIA | HALIFAX STANFIELD INT'L A" = "NOVA SCOTIA",
+                    "NUNAVUT | IQALUIT A" = "NUNAVUT",
+                    "ONTARIO | TORONTO INTL A" = "ONTARIO",
+                    "PRINCE EDWARD ISLAND | CHARLOTTETOWN A" = "PRINCE EDWARD ISLAND",
+                    "QUEBEC | MONTREAL INTL A" = "QUEBEC",
+                    "SASKATCHEWAN | SASKATOON INTL A" = "SASKATCHEWAN",
+                    "YUKON TERRITORY | WHITEHORSE A" = "YUKON TERRITORY"
                   ),
-                  selected = "ONTARIO.csv.gz"
+                  # selected = "ONTARIO.csv.gz"
+                  selected = "ONTARIO"
       ),
       
       selectInput(inputId = "selectedcolumn",
@@ -168,7 +183,8 @@ server <- function(input, output, session) {
   
   selected_data <- reactive({
     req(input$station)
-    out <- read_csv(paste0("./processeddata/", input$station), show_col_types = FALSE)
+    # out <- read_csv(paste0("data/", input$station), show_col_types = FALSE)
+    out <- station_data[[input$station]]
     return(out)
   })
   

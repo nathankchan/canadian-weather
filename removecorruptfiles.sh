@@ -2,9 +2,9 @@
 
 DIRNAME=$1
 
-for FILENAME in $(ls ./data/$DIRNAME)
+for FILENAME in $(ls ./rawdata/$DIRNAME)
 do
-  FULLNAME=$(echo "./data/""$DIRNAME"/$FILENAME)
+  FULLNAME=$(echo "./rawdata/""$DIRNAME"/$FILENAME)
   if [ $(stat -f "%A" $FULLNAME) -ne 644 ]
   then
     rm $FULLNAME

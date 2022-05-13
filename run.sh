@@ -14,5 +14,5 @@ ls data | parallel --progress ./removecorruptfiles.sh {1}
 # Note that ./getdata.sh skips download if file already exists
 tail -n +2 stationlist.csv | parallel --colsep ',' --progress -v ./getdata.sh {5} {15} {16}
 
-# Update combined csv files in ./processeddata
+# Update combined csv files in ./data
 Rscript helper.R

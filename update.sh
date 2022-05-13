@@ -2,13 +2,13 @@
 
 DIRNAME=$1
 
-for FILENAME in $(ls ./data/$DIRNAME)
+for FILENAME in $(ls ./rawdata/$DIRNAME)
 do
   FILEYEAR=$(echo $FILENAME | cut -c -4)
   FILEMONTH=$(echo $FILENAME | cut -c 6-7)
   FILEPOSIX=$(date -jf "%Y %m %d" "$FILEYEAR $FILEMONTH 01" +"%s")
   DATECHECK=$(date -jf "%Y %m %d" -v+1m "$FILEYEAR $FILEMONTH 01" +"%s")
-  FULLNAME=$(echo "./data/""$DIRNAME"/$FILENAME)
+  FULLNAME=$(echo "./rawdata/""$DIRNAME"/$FILENAME)
   
   if [ $(stat -f "%B" "$FULLNAME") -lt $DATECHECK ]
   then

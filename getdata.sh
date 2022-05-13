@@ -5,7 +5,7 @@ STARTYEAR=$(echo $2)
 ENDYEAR=$(echo $3)
 
 RUNDIR=$(pwd)
-DATADIR=$(echo $(pwd)"/data/"$STATIONID"/")
+DATADIR=$(echo $(pwd)"/rawdata/"$STATIONID"/")
 [[ ! -d "$DATADIR" ]] && mkdir -p "$DATADIR"
 
 for YEAR in $(seq $STARTYEAR $ENDYEAR)

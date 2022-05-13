@@ -2,9 +2,9 @@
 
 DIRNAME=$1
 
-for FILENAME in $(ls ./data/$DIRNAME)
+for FILENAME in $(ls ./rawdata/$DIRNAME)
 do
-  ORIGNAME=$(echo "./data/""$DIRNAME"/$FILENAME)
+  ORIGNAME=$(echo "./rawdata/""$DIRNAME"/$FILENAME)
   if [ $(echo $FILENAME | wc -c) -eq 11 ]
   then
     FILENUMBER=$(echo $FILENAME | cut -c 6)

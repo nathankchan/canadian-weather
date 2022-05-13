@@ -50,11 +50,11 @@ combine_stations <- function(x, y, col) {
 get_station_data <- function(ids, emptycol, combinecol) {
   
   station1 <- 
-    combine_csv(dirname = paste0("./data/", ids[1], "/")) %>% 
+    combine_csv(dirname = paste0("./rawdata/", ids[1], "/")) %>% 
     remove_empty_rows(x = ., col = emptycol)
   
   station2 <- 
-    combine_csv(dirname = paste0("./data/", ids[2], "/")) %>% 
+    combine_csv(dirname = paste0("./rawdata/", ids[2], "/")) %>% 
     remove_empty_rows(x = ., col = emptycol)
   
   out <- 
@@ -100,25 +100,36 @@ station_data <-
     combinecol = "Date/Time (LST)"
   )
 
-if (!dir.exists("processeddata")) {dir.create("processeddata")}
+if (!dir.exists("data")) {dir.create("data")}
 invisible(mapply(
   FUN = function(x, filename) {
     write_csv(x = x,
-              file = paste0("processeddata/", filename, ".csv.gz"))
+              file = paste0("data/", filename, ".csv.gz"))
   },
   x = station_data,
   filename = names(station_data),
   SIMPLIFY = FALSE
 ))
 
+rm(station_data)
+station_data <- mapply(
+  read_csv,
+  paste0("./data/", list.files(path = "./data/", pattern = "*.csv.gz")),
+  MoreArgs = list(show_col_types = FALSE),
+  SIMPLIFY = FALSE
+)
+names(station_data) <- names(station_data) %>% basename %>% substr(., 1, nchar(.) - 7)
+
+saveRDS(object = station_data, file = "data/station_data.rds")
+
 
 # Old code for testing purposes...
 
 # data1 <- combine_csv(
-#   dirname = paste0("./data/", stationlist$Station.ID[15], "/")
+#   dirname = paste0("./rawdata/", stationlist$Station.ID[15], "/")
 # )
 # data2 <- combine_csv(
-#   dirname = paste0("./data/", stationlist$Station.ID[16], "/")
+#   dirname = paste0("./rawdata/", stationlist$Station.ID[16], "/")
 # )
 # 
 # data3 <- remove_empty_rows(data1, "Temp (°C)")

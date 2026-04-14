@@ -21,6 +21,8 @@ station_choices <- split(
   stationlist$Province
 )
 
+exclude_cols <- c("Longitude (x)", "Latitude (y)", "Climate ID", "Year")
+
 ui_intro_text <- paste0(
   "Generate interactive plots of historical hourly weather data",
   " for active Canadian weather stations."
@@ -187,6 +189,43 @@ ui <- fluidPage(
 )
 
 
+compute_xaxis <- function(plot_data) {
+  n <- ncol(plot_data)
+  if (n > 365) {
+    xindex <- which(substr(colnames(plot_data), 9, 12) == "01")
+    xindex <- xindex[seq(
+      from = 1,
+      to = length(xindex),
+      by = floor(length(xindex) / 12)
+    )]
+  } else if (n > 12) {
+    xindex <- seq(from = 1, to = n, by = floor(n / 12))
+  } else {
+    xindex <- seq_len(n)
+  }
+
+  list(
+    title = "",
+    tickmode = "array",
+    ticktext = colnames(plot_data)[xindex] |> as.Date() |> format("%y-%b-%d"),
+    tickvals = xindex,
+    range = c(1, n)
+  )
+}
+
+format_date_range <- function(start_date, end_date) {
+  paste0(
+    as.Date(start_date) |> format("%Y-%b-%d"),
+    " to ",
+    as.Date(end_date) |> format("%Y-%b-%d")
+  )
+}
+
+format_plot_title <- function(column, start_date, end_date) {
+  paste0(column, " (", format_date_range(start_date, end_date), ")")
+}
+
+
 server <- function(input, output, session) {
   selected_data <- reactive({
     req(input$station)
@@ -205,14 +244,13 @@ server <- function(input, output, session) {
       collect()
   })
 
-  plot_3dinput <- reactive({
+  plot_columns <- reactive({
     req(input$selectedcolumn)
+    filtered_data()[, c("Date/Time (LST)", "Time (LST)", input$selectedcolumn)]
+  })
 
-    out <- filtered_data()[, c(
-      "Date/Time (LST)",
-      "Time (LST)",
-      input$selectedcolumn
-    )]
+  plot_3dinput <- reactive({
+    out <- plot_columns()
     colnames(out) <- c("Date", "Hour", "Value")
     out[["Date"]] <- format(out[["Date"]], "%Y-%m-%d")
 
@@ -223,13 +261,7 @@ server <- function(input, output, session) {
   })
 
   plot_lineinput <- reactive({
-    req(input$selectedcolumn)
-
-    out <- filtered_data()[, c(
-      "Date/Time (LST)",
-      "Time (LST)",
-      input$selectedcolumn
-    )]
+    out <- plot_columns()
     cbind.data.frame(
       DateTime = as.POSIXct(out[["Date/Time (LST)"]]),
       Value = out[[input$selectedcolumn]]
@@ -237,19 +269,11 @@ server <- function(input, output, session) {
   })
 
   plot_heatinput <- reactive({
-    req(input$selectedcolumn)
-
-    out <- filtered_data()[, c(
-      "Date/Time (LST)",
-      "Time (LST)",
-      input$selectedcolumn
-    )]
+    out <- plot_columns()
     colnames(out) <- c("Date", "Hour", "Value")
-
     out[["Hour"]] <- format(as.POSIXct(out[["Hour"]]), format = "%H") |>
       as.numeric()
-
-    return(out)
+    out
   })
 
   output$zaxistable <- renderTable(
@@ -269,54 +293,20 @@ server <- function(input, output, session) {
   output$display3dplot <- renderPlotly({
     plot_data <- plot_3dinput()
 
-    if (ncol(plot_data) > 365) {
-      xindex <- which(substr(colnames(plot_data), 9, 12) == "01")
-      xindex <- xindex[seq(
-        from = 1,
-        to = length(xindex),
-        by = floor(length(xindex) / 12)
-      )]
-    } else if (ncol(plot_data) > 12) {
-      xindex <- seq(
-        from = 1,
-        to = ncol(plot_data),
-        by = floor(ncol(plot_data) / 12)
-      )
-    } else {
-      xindex <- seq_len(ncol(plot_data))
-    }
-
-    xlabels_df <- cbind.data.frame(
-      xindex = xindex,
-      xlabels = colnames(plot_data)[xindex] |>
-        as.Date() |>
-        format("%y-%b-%d")
-    )
-
-    plot_xaxis <- list(
-      title = "",
-      tickmode = "array",
-      ticktext = xlabels_df$xlabels,
-      tickvals = xlabels_df$xindex,
-      range = c(1, ncol(plot_data))
-    )
-
+    plot_xaxis <- compute_xaxis(plot_data)
     plot_yaxis <- list(
       title = "",
       tickmode = "array",
       ticktext = c("0400h", "0800h", "1200h", "1600h", "2000h", "2400h"),
       tickvals = c(4, 8, 12, 16, 20, 24)
     )
-
-    plot_zaxis <- list(
-      title = input$selectedcolumn
-    )
+    plot_zaxis <- list(title = input$selectedcolumn)
 
     if (input$autozaxis == FALSE) {
       plot_zaxis$range <- c(input$zaxislimits[1], input$zaxislimits[2])
     }
 
-    plot_out <- plot_ly(z = ~plot_data, lighting = list(ambient = 0.9)) |>
+    plot_ly(z = ~plot_data, lighting = list(ambient = 0.9)) |>
       add_surface(
         showscale = TRUE,
         colorbar = list(title = list(text = input$selectedcolumn)),
@@ -335,9 +325,7 @@ server <- function(input, output, session) {
             "<br>",
             input$selectedcolumn,
             "<br>(",
-            input$dates[1] |> as.Date() |> format("%Y-%b-%d"),
-            " to ",
-            input$dates[2] |> as.Date() |> format("%Y-%b-%d"),
+            format_date_range(input$dates[1], input$dates[2]),
             ")"
           )
         ),
@@ -346,19 +334,11 @@ server <- function(input, output, session) {
           yaxis = plot_yaxis,
           zaxis = plot_zaxis,
           scale = list(title = list(text = input$selectedcolumn)),
-          camera = list(
-            eye = list(x = 1.5, y = -1.5, z = 0.75)
-          ),
+          camera = list(eye = list(x = 1.5, y = -1.5, z = 0.75)),
           aspectmode = "manual",
-          aspectratio = list(
-            x = 2,
-            y = 1,
-            z = 1
-          )
+          aspectratio = list(x = 2, y = 1, z = 1)
         )
       )
-
-    return(plot_out)
   })
 
   output$displayline <- renderPlotly({

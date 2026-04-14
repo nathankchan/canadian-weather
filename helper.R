@@ -42,37 +42,46 @@ process_and_write <- function(id, emptycol, outdir) {
   )
 }
 
+process_all_stations <- function(station_ids, emptycol, outdir, n_cores) {
+  if (!dir.exists(outdir)) {
+    dir.create(outdir)
+  }
+
+  cat(sprintf(
+    "Processing %d stations using %d cores...\n",
+    length(station_ids), n_cores
+  ))
+
+  errors <- mclapply(
+    station_ids,
+    process_and_write,
+    emptycol = emptycol,
+    outdir = outdir,
+    mc.cores = n_cores,
+    mc.preschedule = FALSE
+  )
+
+  failed <- station_ids[!vapply(errors, is.null, logical(1))]
+  if (length(failed) > 0) {
+    cat(sprintf("WARNING: %d station(s) failed:\n", length(failed)))
+    for (id in failed) {
+      cat(sprintf("  %s: %s\n", id, errors[[which(station_ids == id)]]))
+    }
+  } else {
+    cat(sprintf(
+      "Done. %d parquet files written to %s\n",
+      length(station_ids), outdir
+    ))
+  }
+}
+
 stationlist <- read_csv(file = "./stationlist.csv", show_col_types = FALSE)
 station_ids <- stationlist$`Station ID`
-
-if (!dir.exists("data")) {
-  dir.create("data")
-}
-
 n_cores <- max(1L, detectCores() - 1L)
-cat(sprintf(
-  "Processing %d stations using %d cores...\n",
-  length(station_ids), n_cores
-))
 
-errors <- mclapply(
-  station_ids,
-  process_and_write,
+process_all_stations(
+  station_ids = station_ids,
   emptycol = "Temp (°C)",
   outdir = "./data/",
-  mc.cores = n_cores,
-  mc.preschedule = FALSE
+  n_cores = n_cores
 )
-
-failed <- station_ids[!vapply(errors, is.null, logical(1))]
-if (length(failed) > 0) {
-  cat(sprintf("WARNING: %d station(s) failed:\n", length(failed)))
-  for (id in failed) {
-    cat(sprintf("  %s: %s\n", id, errors[[which(station_ids == id)]]))
-  }
-} else {
-  cat(sprintf(
-    "Done. %d parquet files written to ./data/\n",
-    length(station_ids)
-  ))
-}

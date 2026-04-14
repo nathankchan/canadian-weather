@@ -2,41 +2,85 @@
 
 ***Prepared by Nathan K. Chan***
 
-**To visit the project website, please visit:** [**https://nathankchan.github.io/canadian-weather/**](https://nathankchan.github.io/canadian-weather/)
+**Project website:** [https://nathankchan.github.io/canadian-weather/](https://nathankchan.github.io/canadian-weather/)
 
-**To visit this project on Github, please visit:** [**https://github.com/nathankchan/canadian-weather**](https://github.com/nathankchan/canadian-weather)
+**GitHub repository:** [https://github.com/nathankchan/canadian-weather](https://github.com/nathankchan/canadian-weather)
 
-**To access the online application, please visit:** [**https://nathankchan.shinyapps.io/canadian-weather/**](https://nathankchan.shinyapps.io/canadian-weather/)
+**Online application:** [https://nathankchan.shinyapps.io/canadian-weather/](https://nathankchan.shinyapps.io/canadian-weather/)
 
 ## Overview
 
-This project hosts an interactive tool to explore historical Canadian weather data. You can also download and run this project locally.
+This project is an interactive Shiny web application for exploring historical hourly weather data across all 13 Canadian provinces and territories. Data is sourced from [Environment and Climate Change Canada (ECCC)](https://climate.weather.gc.ca/historical_data/search_historic_data_e.html) and covers **960 active weather stations**.
 
-[**Visit the app**](https://nathankchan.shinyapps.io/canadian-weather/) to generate custom visualizations of weather data from the largest city in each Canadian province. Browse the data through **surface plots**, **line charts**, and **heat maps**!
+Browse the data through four views: **Surface Plot**, **Line Chart**, **Heat Map**, and **Table**.
 
 <center><img src="example1.png" width="75%"/></center>
 
-## Project Description
+## Requirements
 
-**This project requires** ***R*** **to be installed.** If it is not installed, please visit [r-project.org](https://www.r-project.org/) to download the latest version. This project also requires the following **R** packages to be installed:
+**R 4.5.3** is required. If it is not installed, visit [r-project.org](https://www.r-project.org/).
 
-  * [*tidyverse*](https://www.tidyverse.org/)
-  * [*plotly*](https://plotly.com/r/)
-  * [*htmlwidgets*](https://www.htmlwidgets.org/)
-  * [*shiny*](https://shiny.rstudio.com/) (for interactive Shiny app)
+Dependencies are managed with [renv](https://rstudio.github.io/renv/). Key packages include:
 
-To run this project locally, download the repository and set your directory to the project directory. Then, run `run.sh` from terminal. 
+- [*tidyverse*](https://www.tidyverse.org/) — data wrangling
+- [*arrow*](https://arrow.apache.org/docs/r/) — Parquet I/O and lazy dataset queries
+- [*shiny*](https://shiny.posit.co/) — interactive web application framework
+- [*plotly*](https://plotly.com/r/) — interactive plots
+- [*DT*](https://rstudio.github.io/DT/) — interactive data table
+- [*shinycssloaders*](https://github.com/daattali/shinycssloaders) — loading spinners
 
-Hourly weather data from select Canadian cities will be downloaded to `{project_dir}/data`. This initial download may take *several hours*. To update the project with the most up-to-date data, re-run `run.sh`. Updates may take a several minutes depending on the number of files to update.
+Restore the full dependency lockfile before running:
 
-```{sh}
-cd {project_dir}
-source run.sh
+```r
+renv::restore()
 ```
 
-To load the interactive Shiny app locally, run `app.R` from terminal and visit the link (e.g., `http://127.0.0.1:{port}`). Quit terminal (press `CTRL+C`) to close the app. For example,
+## Running Locally
 
-```{sh}
+### 1. Build the data pipeline
+
+`run.sh` is the master build script. It:
+
+1. Updates station metadata from the ECCC inventory (`update_stationlist.R`)
+2. Downloads raw hourly CSVs per station (`getdata.sh` via GNU `parallel`)
+3. Removes the current month's files so they are re-fetched on next run (`update.sh`)
+4. Checks for and deletes corrupted files (`removecorruptfiles.sh`)
+5. Re-downloads any missing or corrupted files
+6. Converts all CSVs to Parquet format (`helper.R`)
+
+```sh
+cd {project_dir}
+bash run.sh
+```
+
+> The initial download covers 960 stations and may take **several hours**. Subsequent runs only fetch new or updated files and complete in minutes.
+
+### 2. Launch the app
+
+```sh
 cd {project_dir}
 Rscript app.R
 ```
+
+Then open the printed URL (e.g. `http://127.0.0.1:{port}`) in a browser. Press `Ctrl+C` to stop the app.
+
+## Data Flow
+
+```
+ECCC API → getdata.sh → rawdata/{StationID}/*.csv
+    → helper.R (combine CSVs, drop missing rows, type-convert, write Parquet)
+    → data/{StationID}.parquet
+    → app.R (lazy Arrow dataset, date-range filtered)
+    → Shiny UI (Surface Plot / Line Chart / Heat Map / Table)
+```
+
+The app opens each station's Parquet file lazily via `arrow::open_dataset()` and only collects data after applying the selected date-range filter — no full dataset is loaded into memory.
+
+## App Features
+
+- **Province / territory filter** — narrows the station list to a single province or territory, or shows all 960 stations
+- **Station selector** — choose any active ECCC station
+- **Column selector** — choose any numeric measurement column (e.g. temperature, dew point, wind speed)
+- **Date range picker** — restrict the view to any date range within the station's record
+- **Autoscale toggle** — fix the value axis range for consistent comparisons across date ranges
+- **Four tabs:** Surface Plot, Line Chart, Heat Map, Table

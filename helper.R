@@ -16,18 +16,16 @@ combine_csv <- function(dirname) {
     paste0(dirname, list.files(dirname)),
     SIMPLIFY = FALSE
   )
-  data_combined <- bind_rows(data_list)
-  return(data_combined)
+  bind_rows(data_list)
 }
 
 remove_empty_rows <- function(x, col) {
-  data_in <- x[-which(is.na(x[, col])), ]
-  return(data_in)
+  x[-which(is.na(x[, col])), ]
 }
 
 get_station_data <- function(id, emptycol) {
-  combine_csv(dirname = paste0("./rawdata/", id, "/")) %>%
-    remove_empty_rows(x = ., col = emptycol)
+  combine_csv(dirname = paste0("./rawdata/", id, "/")) |>
+    remove_empty_rows(x = _, col = emptycol)
 }
 
 process_and_write <- function(id, emptycol, outdir) {
@@ -52,7 +50,10 @@ if (!dir.exists("data")) {
 }
 
 n_cores <- max(1L, detectCores() - 1L)
-cat(sprintf("Processing %d stations using %d cores...\n", length(station_ids), n_cores))
+cat(sprintf(
+  "Processing %d stations using %d cores...\n",
+  length(station_ids), n_cores
+))
 
 errors <- mclapply(
   station_ids,
@@ -66,7 +67,12 @@ errors <- mclapply(
 failed <- station_ids[!vapply(errors, is.null, logical(1))]
 if (length(failed) > 0) {
   cat(sprintf("WARNING: %d station(s) failed:\n", length(failed)))
-  for (id in failed) cat(sprintf("  %s: %s\n", id, errors[[which(station_ids == id)]]))
+  for (id in failed) {
+    cat(sprintf("  %s: %s\n", id, errors[[which(station_ids == id)]]))
+  }
 } else {
-  cat(sprintf("Done. %d parquet files written to ./data/\n", length(station_ids)))
+  cat(sprintf(
+    "Done. %d parquet files written to ./data/\n",
+    length(station_ids)
+  ))
 }

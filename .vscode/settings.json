@@ -3,9 +3,6 @@
         "editor.formatOnSave": true,
         "editor.defaultFormatter": "Posit.air-vscode"
     },
-    "[quarto]": {
-        "editor.formatOnSave": true,
-        "editor.defaultFormatter": "quarto.quarto"
-    },
+    "remote.autoForwardPortsSource": "process",
     "remote.autoForwardPortsFallback": 0
 }

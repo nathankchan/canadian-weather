@@ -8,9 +8,10 @@ library(shinycssloaders)
 library(DT)
 library(arrow)
 
-# Runs a Shiny R app to interactively view Canadian historical weather data by range
+# Runs a Shiny R app to interactively view Canadian historical weather data
+# by range
 
-stationlist <- read_csv("stationlist.csv", show_col_types = FALSE) %>%
+stationlist <- read_csv("stationlist.csv", show_col_types = FALSE) |>
   arrange(Name)
 station_choices <- split(
   setNames(
@@ -18,6 +19,15 @@ station_choices <- split(
     stationlist$Name
   ),
   stationlist$Province
+)
+
+ui_intro_text <- paste0(
+  "Generate interactive plots of historical hourly weather data",
+  " for active Canadian weather stations."
+)
+ui_zaxis_help_text <- paste0(
+  "Limits are with respect to the entire data range.",
+  " Values below describe the maximum and minimum for the data displayed."
 )
 
 ui <- fluidPage(
@@ -28,7 +38,7 @@ ui <- fluidPage(
       width = 3,
 
       p(span(
-        "Generate interactive plots of historical hourly weather data for active Canadian weather stations.",
+        ui_intro_text,
         style = "color:blue"
       )),
 
@@ -99,7 +109,7 @@ ui <- fluidPage(
         conditionalPanel(
           condition = "input.showhelp == 'TRUE'",
           p(span(
-            "Limits are with respect to the entire data range. Values below describe the maximum and minimum for the data displayed.",
+            ui_zaxis_help_text,
             style = "color:grey"
           ))
         ),
@@ -187,11 +197,11 @@ server <- function(input, output, session) {
     req(input$dates)
     start_posix <- as.POSIXct(input$dates[1])
     end_posix <- as.POSIXct(input$dates[2] + 1L)
-    selected_data() %>%
+    selected_data() |>
       filter(
         `Date/Time (LST)` >= start_posix,
         `Date/Time (LST)` < end_posix
-      ) %>%
+      ) |>
       collect()
   })
 
@@ -206,9 +216,9 @@ server <- function(input, output, session) {
     colnames(out) <- c("Date", "Hour", "Value")
     out[["Date"]] <- format(out[["Date"]], "%Y-%m-%d")
 
-    out %>%
-      pivot_wider(names_from = Date, values_from = Value) %>%
-      select(-Hour) %>%
+    out |>
+      pivot_wider(names_from = Date, values_from = Value) |>
+      select(-Hour) |>
       as.matrix()
   })
 
@@ -236,7 +246,7 @@ server <- function(input, output, session) {
     )]
     colnames(out) <- c("Date", "Hour", "Value")
 
-    out[["Hour"]] <- format(as.POSIXct(out[["Hour"]]), format = "%H") %>%
+    out[["Hour"]] <- format(as.POSIXct(out[["Hour"]]), format = "%H") |>
       as.numeric()
 
     return(out)
@@ -278,9 +288,9 @@ server <- function(input, output, session) {
 
     xlabels_df <- cbind.data.frame(
       xindex = xindex,
-      xlabels = colnames(plot_data)[xindex] %>%
-        as.Date() %>%
-        format(., "%y-%b-%d")
+      xlabels = colnames(plot_data)[xindex] |>
+        as.Date() |>
+        format("%y-%b-%d")
     )
 
     plot_xaxis <- list(
@@ -306,7 +316,7 @@ server <- function(input, output, session) {
       plot_zaxis$range <- c(input$zaxislimits[1], input$zaxislimits[2])
     }
 
-    plot_out <- plot_ly(z = ~plot_data, lighting = list(ambient = 0.9)) %>%
+    plot_out <- plot_ly(z = ~plot_data, lighting = list(ambient = 0.9)) |>
       add_surface(
         showscale = TRUE,
         colorbar = list(title = list(text = input$selectedcolumn)),
@@ -318,16 +328,16 @@ server <- function(input, output, session) {
             project = list(z = FALSE)
           )
         )
-      ) %>%
+      ) |>
       layout(
         title = list(
           text = paste0(
             "<br>",
             input$selectedcolumn,
             "<br>(",
-            input$dates[1] %>% as.Date() %>% format(., "%Y-%b-%d"),
+            input$dates[1] |> as.Date() |> format("%Y-%b-%d"),
             " to ",
-            input$dates[2] %>% as.Date() %>% format(., "%Y-%b-%d"),
+            input$dates[2] |> as.Date() |> format("%Y-%b-%d"),
             ")"
           )
         ),
@@ -365,9 +375,9 @@ server <- function(input, output, session) {
         title = paste0(
           input$selectedcolumn,
           " (",
-          input$dates[1] %>% as.Date() %>% format(., "%Y-%b-%d"),
+          input$dates[1] |> as.Date() |> format("%Y-%b-%d"),
           " to ",
-          input$dates[2] %>% as.Date() %>% format(., "%Y-%b-%d"),
+          input$dates[2] |> as.Date() |> format("%Y-%b-%d"),
           ")"
         )
       ) +
@@ -396,9 +406,9 @@ server <- function(input, output, session) {
         title = paste0(
           input$selectedcolumn,
           " (",
-          input$dates[1] %>% as.Date() %>% format(., "%Y-%b-%d"),
+          input$dates[1] |> as.Date() |> format("%Y-%b-%d"),
           " to ",
-          input$dates[2] %>% as.Date() %>% format(., "%Y-%b-%d"),
+          input$dates[2] |> as.Date() |> format("%Y-%b-%d"),
           ")"
         )
       )
@@ -425,11 +435,11 @@ server <- function(input, output, session) {
   )
 
   output$datehelp <- renderText({
-    date_range <- selected_data() %>%
+    date_range <- selected_data() |>
       summarise(
         min_date = min(`Date/Time (LST)`, na.rm = TRUE),
         max_date = max(`Date/Time (LST)`, na.rm = TRUE)
-      ) %>%
+      ) |>
       collect()
     firstdate <- format(as.POSIXct(date_range$min_date), "%Y-%m-%d")
     lastdate <- format(as.POSIXct(date_range$max_date), "%Y-%m-%d")
@@ -472,11 +482,11 @@ server <- function(input, output, session) {
         !ds$schema$names %in% exclude_cols
     ]
 
-    date_range <- ds %>%
+    date_range <- ds |>
       summarise(
         min_date = min(`Date/Time (LST)`, na.rm = TRUE),
         max_date = max(`Date/Time (LST)`, na.rm = TRUE)
-      ) %>%
+      ) |>
       collect()
 
     min_date <- as.POSIXct(date_range$min_date)
@@ -501,12 +511,11 @@ server <- function(input, output, session) {
     req(input$selectedcolumn)
     req(input$dates)
 
-    col_data <- selected_data() %>%
-      select(all_of(input$selectedcolumn)) %>%
-      collect() %>%
-      .[[1]]
+    col_data <- selected_data() |>
+      select(all_of(input$selectedcolumn)) |>
+      collect()
 
-    out <- range(col_data, na.rm = TRUE)
+    out <- range(col_data[[1]], na.rm = TRUE)
     buffer <- (out[2] - out[1]) / 10
 
     updateSliderInput(

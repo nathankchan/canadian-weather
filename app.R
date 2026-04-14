@@ -4,284 +4,292 @@ library(tidyverse)
 library(plotly)
 library(htmlwidgets)
 library(shiny)
+library(shinycssloaders)
+library(DT)
+library(arrow)
 
-# required_packages <-
-#   c("tidyverse",
-#     "plotly",
-#     "htmlwidgets",
-#     "shiny")
-# 
-# check_installed <- suppressWarnings(unlist(lapply(required_packages, require, character.only = TRUE)))
-# needed_packages <- required_packages[check_installed == FALSE]
-# install.packages(needed_packages)
-# lapply(required_packages, require, character.only = TRUE)
+# Runs a Shiny R app to interactively view Canadian historical weather data by range
 
-# station_data <- readRDS("./data/station_data.rds")
-
-# Code for testing...
-
-# plot_data <- data_all[, c("Date", "Hour", "Market.Demand")] %>%
-#   pivot_wider(names_from = Date, values_from = Market.Demand) %>%
-#   select(-Hour) %>% as.matrix()
-
-# Runs a Shiny R app to interactively view Ontario market data by range
+stationlist <- read_csv("stationlist.csv", show_col_types = FALSE) %>%
+  arrange(Name)
+station_choices <- split(
+  setNames(
+    paste0(stationlist$`Station ID`, ".parquet"),
+    stationlist$Name
+  ),
+  stationlist$Province
+)
 
 ui <- fluidPage(
-  
   titlePanel("Canadian Historical Weather Data"),
-  
+
   sidebarLayout(
     sidebarPanel(
       width = 3,
 
-      p(span("Generate interactive plots of weather data from the largest city of each Canadian province.", style = "color:blue")),
-      
-      radioButtons(inputId = "showhelp",
-                   label = span("Display help text", style = "color:blue"),
-                   choices = list("Yes" = TRUE, "No" = FALSE),
-                   selected = TRUE
+      p(span(
+        "Generate interactive plots of historical hourly weather data for active Canadian weather stations.",
+        style = "color:blue"
+      )),
+
+      radioButtons(
+        inputId = "showhelp",
+        label = span("Display help text", style = "color:blue"),
+        choices = list("Yes" = TRUE, "No" = FALSE),
+        selected = TRUE
       ),
-      
-      selectInput(inputId = "station",
-                  label = "Choose station to display",
-                  choices = list(
-                    "ALBERTA | CALGARY INTL A" = "ALBERTA.csv.gz",
-                    "BRITISH COLUMBIA | VANCOUVER INTL A" = "BRITISH COLUMBIA.csv.gz",
-                    "MANITOBA | WINNIPEG INTL A" = "MANITOBA.csv.gz",
-                    "NEW BRUNSWICK | MONCTON/GREATER MONCTON ROMEO LEBLANC INTL A" = "NEW BRUNSWICK.csv.gz",
-                    "NEWFOUNDLAND | ST. JOHN'S INTL A" = "NEWFOUNDLAND.csv.gz",
-                    "NORTHWEST TERRITORIES | YELLOWKNIFE A" = "NORTHWEST TERRITORIES.csv.gz",
-                    "NOVA SCOTIA | HALIFAX STANFIELD INT'L A" = "NOVA SCOTIA.csv.gz",
-                    "NUNAVUT | IQALUIT A" = "NUNAVUT.csv.gz",
-                    "ONTARIO | TORONTO INTL A" = "ONTARIO.csv.gz",
-                    "PRINCE EDWARD ISLAND | CHARLOTTETOWN A" = "PRINCE EDWARD ISLAND.csv.gz",
-                    "QUEBEC | MONTREAL INTL A" = "QUEBEC.csv.gz",
-                    "SASKATCHEWAN | SASKATOON INTL A" = "SASKATCHEWAN.csv.gz",
-                    "YUKON TERRITORY | WHITEHORSE A" = "YUKON TERRITORY.csv.gz"
-                    
-                    # "ALBERTA | CALGARY INTL A" = "ALBERTA",
-                    # "BRITISH COLUMBIA | VANCOUVER INTL A" = "BRITISH COLUMBIA",
-                    # "MANITOBA | WINNIPEG INTL A" = "MANITOBA",
-                    # "NEW BRUNSWICK | MONCTON/GREATER MONCTON ROMEO LEBLANC INTL A" = "NEW BRUNSWICK",
-                    # "NEWFOUNDLAND | ST. JOHN'S INTL A" = "NEWFOUNDLAND",
-                    # "NORTHWEST TERRITORIES | YELLOWKNIFE A" = "NORTHWEST TERRITORIES",
-                    # "NOVA SCOTIA | HALIFAX STANFIELD INT'L A" = "NOVA SCOTIA",
-                    # "NUNAVUT | IQALUIT A" = "NUNAVUT",
-                    # "ONTARIO | TORONTO INTL A" = "ONTARIO",
-                    # "PRINCE EDWARD ISLAND | CHARLOTTETOWN A" = "PRINCE EDWARD ISLAND",
-                    # "QUEBEC | MONTREAL INTL A" = "QUEBEC",
-                    # "SASKATCHEWAN | SASKATOON INTL A" = "SASKATCHEWAN",
-                    # "YUKON TERRITORY | WHITEHORSE A" = "YUKON TERRITORY"
-                  ),
-                  selected = "ONTARIO.csv.gz"
-                  # selected = "ONTARIO"
+
+      selectInput(
+        inputId = "province",
+        label = "Choose province or territory",
+        choices = c("All provinces / territories" = "", names(station_choices)),
+        selected = ""
       ),
-      
-      selectInput(inputId = "selectedcolumn",
-                  label = "Choose data to display",
-                  choice = c(""))
-      
-      ,
-      
-      dateRangeInput(inputId = "dates",
-                     label = "Specify date range"
-                     # ,
-                     # start = (Sys.Date() - 365 * 2) %>% as.character(),
-                     # end = Sys.Date() %>% as.character(),
-                     # min = (Sys.Date() - 365 - 2) %>% as.character(),
-                     # max = Sys.Date() %>% as.character()
-                     ) 
-      
-      ,
-      
+
+      selectInput(
+        inputId = "station",
+        label = "Choose station to display",
+        choices = c("Select a station..." = ""),
+        selected = ""
+      ),
+
+      selectInput(
+        inputId = "selectedcolumn",
+        label = "Choose data to display",
+        choice = c("")
+      ),
+
+      dateRangeInput(
+        inputId = "dates",
+        label = "Specify date range"
+      ),
+
       tags$head(tags$style("#datehelp{color:grey;}")),
-      
+
       conditionalPanel(
         condition = "input.showhelp == 'TRUE'",
         htmlOutput(outputId = "datehelp")
-      )
-      
-      ,
+      ),
 
-      radioButtons(inputId = "autozaxis",
-                   label = "Autoscale height",
-                   choices = list("Yes" = TRUE, "No" = FALSE),
-                   selected = TRUE
-                   ),
+      radioButtons(
+        inputId = "autozaxis",
+        label = "Autoscale height",
+        choices = list("Yes" = TRUE, "No" = FALSE),
+        selected = TRUE
+      ),
 
       conditionalPanel(
         condition = "input.showhelp == 'TRUE'",
-        p(span("Turn off autoscaling to facilitate comparisons across date ranges.", style = "color:grey"))
-      )
-      
-      ,
+        p(span(
+          "Turn off autoscaling to facilitate comparisons across date ranges.",
+          style = "color:grey"
+        ))
+      ),
 
       conditionalPanel(
         condition = "input.autozaxis == 'FALSE'",
-        sliderInput(inputId = "zaxislimits",
-                    label = "Specify height limits",
-                    min = 0, max = 1,
-                    value = c(0, 1),
-                    step = 0.1),
+        sliderInput(
+          inputId = "zaxislimits",
+          label = "Specify height limits",
+          min = 0,
+          max = 1,
+          value = c(0, 1),
+          step = 0.1
+        ),
         conditionalPanel(
           condition = "input.showhelp == 'TRUE'",
-          p(span("Limits are with respect to the entire data range. Values below describe the maximum and minimum for the data displayed.", style = "color:grey"))
+          p(span(
+            "Limits are with respect to the entire data range. Values below describe the maximum and minimum for the data displayed.",
+            style = "color:grey"
+          ))
         ),
         tableOutput(outputId = "zaxistable")
-      )
-      ,
+      ),
 
       conditionalPanel(
         condition = "input.showhelp == 'TRUE'",
         hr(style = "border-top: 1px dotted #808080;"),
-        p(a("Source", href = "https://climate.weather.gc.ca/historical_data/search_historic_data_e.html")),
-        p(span(em("Data are published by Environment and Climate Change Canada."), style = "color:grey")),
-        p(span(em("Built by"), "Nathan K. Chan", em(" in ", strong("R"), "and", strong("Shiny", .noWS = "after"), ". Visit the project on Github ", a("here", href = "https://nathankchan.github.io/canadian-weather/", .noWS = "after"), "."), style = "color:grey"))
+        p(a(
+          "Source",
+          href = "https://climate.weather.gc.ca/historical_data/search_historic_data_e.html"
+        )),
+        p(span(
+          em("Data are published by Environment and Climate Change Canada."),
+          style = "color:grey"
+        )),
+        p(span(
+          em("Built by"),
+          "Nathan K. Chan",
+          em(
+            " in ",
+            strong("R"),
+            "and",
+            strong("Shiny", .noWS = "after"),
+            ". Visit the project on Github ",
+            a(
+              "here",
+              href = "https://nathankchan.github.io/canadian-weather/",
+              .noWS = "after"
+            ),
+            "."
+          ),
+          style = "color:grey"
+        ))
       )
-
-      # ,
-      
-      
     ),
-    
+
     mainPanel(
       width = 9,
       tabsetPanel(
         tabPanel(
-          title = "Surface Plot", 
-          plotlyOutput(
+          title = "Surface Plot",
+          withSpinner(plotlyOutput(
             outputId = "display3dplot",
             width = "auto",
-            height = "800px"))
-        ,
+            height = "800px"
+          ))
+        ),
         tabPanel(
-          title = "Line Chart", 
-          plotlyOutput(
+          title = "Line Chart",
+          withSpinner(plotlyOutput(
             outputId = "displayline",
             width = "auto",
-            height = "800px"))
-        ,
+            height = "800px"
+          ))
+        ),
         tabPanel(
-          title = "Heat Map", 
-          plotlyOutput(
+          title = "Heat Map",
+          withSpinner(plotlyOutput(
             outputId = "displayheat",
             width = "auto",
-            height = "800px"))
-        ,
+            height = "800px"
+          ))
+        ),
         tabPanel(
-          title = "Table", 
-          dataTableOutput(
-            outputId = "displaytable"))
+          title = "Table",
+          DTOutput(
+            outputId = "displaytable"
+          )
+        )
       )
     )
-    
   )
 )
 
 
 server <- function(input, output, session) {
-  
   selected_data <- reactive({
     req(input$station)
-    out <- read_csv(paste0("./data/", input$station), show_col_types = FALSE)
-    # out <- station_data[[input$station]]
-    return(out)
+    open_dataset(paste0("./data/", input$station))
   })
-  
+
+  filtered_data <- reactive({
+    req(input$dates)
+    start_posix <- as.POSIXct(input$dates[1])
+    end_posix <- as.POSIXct(input$dates[2] + 1L)
+    selected_data() %>%
+      filter(
+        `Date/Time (LST)` >= start_posix,
+        `Date/Time (LST)` < end_posix
+      ) %>%
+      collect()
+  })
+
   plot_3dinput <- reactive({
     req(input$selectedcolumn)
-    
-    data_all <- selected_data()
-    
-    start_date <- which(as.character(data_all[["Date/Time (LST)"]], format = "%Y-%m-%d") %in% as.character(input$dates[1]))[1]
-    end_date <- which(as.character(data_all[["Date/Time (LST)"]], format = "%Y-%m-%d") %in% as.character(input$dates[2])) %>% .[length(.)]
 
-    out <- data_all[start_date:end_date, c("Date/Time (LST)", "Time (LST)", input$selectedcolumn)]
+    out <- filtered_data()[, c(
+      "Date/Time (LST)",
+      "Time (LST)",
+      input$selectedcolumn
+    )]
     colnames(out) <- c("Date", "Hour", "Value")
-    out[["Date"]] <- as.character(out[["Date"]], format = "%Y-%m-%d")
-    
-    out <- out %>%
-      pivot_wider(names_from = Date, values_from = Value) %>%
-      select(-Hour) %>% as.matrix()
+    out[["Date"]] <- format(out[["Date"]], "%Y-%m-%d")
 
+    out %>%
+      pivot_wider(names_from = Date, values_from = Value) %>%
+      select(-Hour) %>%
+      as.matrix()
   })
 
   plot_lineinput <- reactive({
     req(input$selectedcolumn)
-    data_all <- selected_data()
-    
-    start_date <- which(as.character(data_all[["Date/Time (LST)"]], format = "%Y-%m-%d") %in% as.character(input$dates[1]))[1]
-    end_date <- which(as.character(data_all[["Date/Time (LST)"]], format = "%Y-%m-%d") %in% as.character(input$dates[2])) %>% .[length(.)]
 
-    out <- data_all[start_date:end_date, c("Date/Time (LST)", "Time (LST)", input$selectedcolumn)]
-
-    out <- cbind.data.frame(
+    out <- filtered_data()[, c(
+      "Date/Time (LST)",
+      "Time (LST)",
+      input$selectedcolumn
+    )]
+    cbind.data.frame(
       DateTime = as.POSIXct(out[["Date/Time (LST)"]]),
       Value = out[[input$selectedcolumn]]
     )
-    
-    return(out)
-
   })
 
   plot_heatinput <- reactive({
     req(input$selectedcolumn)
-    data_all <- selected_data()
 
-    start_date <- which(as.character(data_all[["Date/Time (LST)"]], format = "%Y-%m-%d") %in% as.character(input$dates[1]))[1]
-    end_date <- which(as.character(data_all[["Date/Time (LST)"]], format = "%Y-%m-%d") %in% as.character(input$dates[2])) %>% .[length(.)]
-
-    out <- data_all[start_date:end_date, c("Date/Time (LST)", "Time (LST)", input$selectedcolumn)]
+    out <- filtered_data()[, c(
+      "Date/Time (LST)",
+      "Time (LST)",
+      input$selectedcolumn
+    )]
     colnames(out) <- c("Date", "Hour", "Value")
-    
-    out[["Hour"]] <- format(as.POSIXct(out[["Hour"]]), format = "%H") %>% as.numeric()
+
+    out[["Hour"]] <- format(as.POSIXct(out[["Hour"]]), format = "%H") %>%
+      as.numeric()
 
     return(out)
-
   })
-  
-  output$zaxistable <- renderTable({
-    req(input$selectedcolumn)
-    data_all <- selected_data()
 
-    start_date <- which(as.character(data_all[["Date/Time (LST)"]], format = "%Y-%m-%d") %in% as.character(input$dates[1]))[1]
-    end_date <- which(as.character(data_all[["Date/Time (LST)"]], format = "%Y-%m-%d") %in% as.character(input$dates[2])) %>% .[length(.)]
+  output$zaxistable <- renderTable(
+    {
+      req(input$selectedcolumn)
 
-    minmax <- data_all[start_date:end_date, input$selectedcolumn]
-    minmax <- cbind.data.frame(
-      Minimum = min(minmax),
-      Maximum = max(minmax))
-
-    out <- minmax
-
-  }, width = "100%", align = "c")
-  
+      minmax <- filtered_data()[[input$selectedcolumn]]
+      cbind.data.frame(
+        Minimum = min(minmax, na.rm = TRUE),
+        Maximum = max(minmax, na.rm = TRUE)
+      )
+    },
+    width = "100%",
+    align = "c"
+  )
 
   output$display3dplot <- renderPlotly({
-
     plot_data <- plot_3dinput()
 
     if (ncol(plot_data) > 365) {
       xindex <- which(substr(colnames(plot_data), 9, 12) == "01")
-      xindex <- xindex[seq(from = 1, to = length(xindex), by = floor(length(xindex)/12))]
+      xindex <- xindex[seq(
+        from = 1,
+        to = length(xindex),
+        by = floor(length(xindex) / 12)
+      )]
     } else if (ncol(plot_data) > 12) {
-      xindex <- seq(from = 1, to = ncol(plot_data), by = floor(ncol(plot_data)/12))
+      xindex <- seq(
+        from = 1,
+        to = ncol(plot_data),
+        by = floor(ncol(plot_data) / 12)
+      )
     } else {
       xindex <- seq_len(ncol(plot_data))
     }
 
     xlabels_df <- cbind.data.frame(
       xindex = xindex,
-      xlabels = colnames(plot_data)[xindex] %>% as.Date() %>% format(., "%y-%b-%d")
+      xlabels = colnames(plot_data)[xindex] %>%
+        as.Date() %>%
+        format(., "%y-%b-%d")
     )
-
 
     plot_xaxis <- list(
       title = "",
       tickmode = "array",
       ticktext = xlabels_df$xlabels,
       tickvals = xlabels_df$xindex,
-      range = c(1, ncol(plot_data)))
+      range = c(1, ncol(plot_data))
+    )
 
     plot_yaxis <- list(
       title = "",
@@ -298,8 +306,7 @@ server <- function(input, output, session) {
       plot_zaxis$range <- c(input$zaxislimits[1], input$zaxislimits[2])
     }
 
-    plot_out <- plot_ly(z = ~ plot_data,
-            lighting = list(ambient = 0.9)) %>%
+    plot_out <- plot_ly(z = ~plot_data, lighting = list(ambient = 0.9)) %>%
       add_surface(
         showscale = TRUE,
         colorbar = list(title = list(text = input$selectedcolumn)),
@@ -308,52 +315,50 @@ server <- function(input, output, session) {
             show = FALSE,
             usecolormap = TRUE,
             highlightcolor = "#ff0000",
-            project = list(z = F)
+            project = list(z = FALSE)
           )
         )
       ) %>%
       layout(
-        title = list(text = paste0(
-          "<br>",
-          input$selectedcolumn,
-          "<br>(",
-          input$dates[1] %>% as.Date() %>% format(., "%Y-%b-%d"),
-          " to ",
-          input$dates[2] %>% as.Date() %>% format(., "%Y-%b-%d"),
-          ")"
-        )),
-        # legend = list(text = "Demand (MW)"),
+        title = list(
+          text = paste0(
+            "<br>",
+            input$selectedcolumn,
+            "<br>(",
+            input$dates[1] %>% as.Date() %>% format(., "%Y-%b-%d"),
+            " to ",
+            input$dates[2] %>% as.Date() %>% format(., "%Y-%b-%d"),
+            ")"
+          )
+        ),
         scene = list(
-               xaxis = plot_xaxis,
-               yaxis = plot_yaxis,
-               zaxis = plot_zaxis,
-               scale = list(title = list(text = input$selectedcolumn)),
-               camera = list(
-                 eye = list(x = 1.5,
-                            y = -1.5,
-                            z = 0.75)
-               ),
-               aspectmode = "manual",
-               aspectratio = list(
-                 x = 2,
-                 y = 1,
-                 z = 1
-               ))
+          xaxis = plot_xaxis,
+          yaxis = plot_yaxis,
+          zaxis = plot_zaxis,
+          scale = list(title = list(text = input$selectedcolumn)),
+          camera = list(
+            eye = list(x = 1.5, y = -1.5, z = 0.75)
+          ),
+          aspectmode = "manual",
+          aspectratio = list(
+            x = 2,
+            y = 1,
+            z = 1
+          )
+        )
       )
 
     return(plot_out)
-
   })
 
   output$displayline <- renderPlotly({
-
     plot_data <- plot_lineinput()
 
     plot_out <- ggplot(
       data = plot_data,
       aes(x = DateTime, y = Value)
-      ) +
-      geom_line(size = 0.1, color = "blue") +
+    ) +
+      geom_line(linewidth = 0.1, color = "blue") +
       labs(
         x = "Date",
         y = input$selectedcolumn,
@@ -364,7 +369,8 @@ server <- function(input, output, session) {
           " to ",
           input$dates[2] %>% as.Date() %>% format(., "%Y-%b-%d"),
           ")"
-        )) +
+        )
+      ) +
       theme_light()
 
     if (input$autozaxis == FALSE) {
@@ -372,11 +378,9 @@ server <- function(input, output, session) {
     }
 
     return(ggplotly(plot_out))
-
   })
 
   output$displayheat <- renderPlotly({
-
     plot_data <- plot_heatinput()
 
     plot_out <- ggplot(
@@ -384,8 +388,7 @@ server <- function(input, output, session) {
       aes(x = as.Date(Date), y = Hour)
     ) +
       geom_tile(aes(fill = Value)) +
-      scale_y_continuous(n.breaks = 13,
-                         limits = c(0,23)) +
+      scale_y_continuous(n.breaks = 13, limits = c(0, 23)) +
       labs(
         x = "Date",
         y = "Hour",
@@ -397,7 +400,8 @@ server <- function(input, output, session) {
           " to ",
           input$dates[2] %>% as.Date() %>% format(., "%Y-%b-%d"),
           ")"
-        ))
+        )
+      )
 
     if (input$autozaxis == FALSE) {
       plot_out <- plot_out +
@@ -410,69 +414,108 @@ server <- function(input, output, session) {
     }
 
     return(ggplotly(plot_out))
+  })
 
-  })
-  
-  output$displaytable <- renderDataTable({
-    req(input$station)
-    data_all <- selected_data()
-    
-    start_date <- which(as.character(data_all[["Date/Time (LST)"]], format = "%Y-%m-%d") %in% as.character(input$dates[1]))[1]
-    end_date <- which(as.character(data_all[["Date/Time (LST)"]], format = "%Y-%m-%d") %in% as.character(input$dates[2])) %>% .[length(.)]
-    
-    out <- data_all[start_date:end_date,]
-    
-    return(out)
-  }, options = list(width = "75%"))
-  
+  output$displaytable <- renderDT(
+    {
+      req(input$station)
+      filtered_data()
+    },
+    options = list(width = "75%")
+  )
+
   output$datehelp <- renderText({
-    data_all <- selected_data()
-    firstdate <- as.character(data_all[["Date/Time (LST)"]][1], format = "%Y-%m-%d")
-    lastdate <- as.character(data_all[["Date/Time (LST)"]][nrow(data_all)], format = "%Y-%m-%d")
-    out <- paste0("<p>Data are available from <i>", firstdate, "</i> to <i>", lastdate, "</i>.</p>")
+    date_range <- selected_data() %>%
+      summarise(
+        min_date = min(`Date/Time (LST)`, na.rm = TRUE),
+        max_date = max(`Date/Time (LST)`, na.rm = TRUE)
+      ) %>%
+      collect()
+    firstdate <- format(as.POSIXct(date_range$min_date), "%Y-%m-%d")
+    lastdate <- format(as.POSIXct(date_range$max_date), "%Y-%m-%d")
+    out <- paste0(
+      "<p>Data are available from <i>",
+      firstdate,
+      "</i> to <i>",
+      lastdate,
+      "</i>.</p>"
+    )
     return(out)
   })
-  
+
+  observeEvent(input$province, {
+    if (input$province == "") {
+      updateSelectInput(
+        session,
+        "station",
+        choices = station_choices,
+        selected = station_choices[[1]][[1]]
+      )
+    } else {
+      updateSelectInput(
+        session,
+        "station",
+        choices = station_choices[[input$province]],
+        selected = station_choices[[input$province]][[1]]
+      )
+    }
+  })
 
   observe({
     req(input$station)
-    data_all <- selected_data()
+    ds <- selected_data()
+
+    exclude_cols <- c("Longitude (x)", "Latitude (y)", "Climate ID", "Year")
+    type_strs <- sapply(ds$schema$fields, function(f) f$type$ToString())
+    numeric_cols <- ds$schema$names[
+      grepl("^(int|uint|float|double)", type_strs, ignore.case = TRUE) &
+        !ds$schema$names %in% exclude_cols
+    ]
+
+    date_range <- ds %>%
+      summarise(
+        min_date = min(`Date/Time (LST)`, na.rm = TRUE),
+        max_date = max(`Date/Time (LST)`, na.rm = TRUE)
+      ) %>%
+      collect()
+
+    min_date <- as.POSIXct(date_range$min_date)
+    max_date <- as.POSIXct(date_range$max_date)
+
     updateSelectInput(
       session = session,
       inputId = "selectedcolumn",
-      choices = colnames(data_all[, sapply(data_all, is.numeric)]),
+      choices = numeric_cols,
       selected = "Temp (°C)"
     )
     updateDateRangeInput(
       inputId = "dates",
-      min = data_all[["Date/Time (LST)"]][1],
-      start = data_all[["Date/Time (LST)"]][nrow(data_all) - 365 * 24 * 2],
-      max = data_all[["Date/Time (LST)"]][nrow(data_all)],
-      end = data_all[["Date/Time (LST)"]][nrow(data_all)]
+      min = min_date,
+      start = max_date - 365 * 24 * 3600 * 2,
+      max = max_date,
+      end = max_date
     )
-    
   })
-  
+
   observe({
     req(input$selectedcolumn)
     req(input$dates)
-    
-    data_all <- selected_data()
-    
-    out <- data_all[[input$selectedcolumn]]
-    out <- range(out)
-    
-    buffer <- (out[2] - out[1])/10
-    
+
+    col_data <- selected_data() %>%
+      select(all_of(input$selectedcolumn)) %>%
+      collect() %>%
+      .[[1]]
+
+    out <- range(col_data, na.rm = TRUE)
+    buffer <- (out[2] - out[1]) / 10
+
     updateSliderInput(
       inputId = "zaxislimits",
-      min = out[1] - buffer, 
+      min = out[1] - buffer,
       max = out[2] + buffer,
       value = c(out[1], out[2])
     )
   })
-  
-  
 }
 
 

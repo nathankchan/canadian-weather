@@ -12,7 +12,7 @@
 
 This project is an interactive Shiny web application for exploring historical hourly weather data across all 13 Canadian provinces and territories. Data is sourced from [Environment and Climate Change Canada (ECCC)](https://climate.weather.gc.ca/historical_data/search_historic_data_e.html) and covers **960 active weather stations**.
 
-Browse the data through four views: **Surface Plot**, **Line Chart**, **Heat Map**, and **Table**.
+Browse the data through five views: **Map**, **Surface Plot**, **Line Chart**, **Heat Map**, and **Table**.
 
 <center><img src="example1.png" width="75%"/></center>
 
@@ -27,6 +27,7 @@ Dependencies are managed with [renv](https://rstudio.github.io/renv/). Key packa
 - [*shiny*](https://shiny.posit.co/) — interactive web application framework
 - [*plotly*](https://plotly.com/r/) — interactive plots
 - [*DT*](https://rstudio.github.io/DT/) — interactive data table
+- [*leaflet*](https://rstudio.github.io/leaflet/) — interactive station map
 - [*shinycssloaders*](https://github.com/daattali/shinycssloaders) — loading spinners
 
 Restore the full dependency lockfile before running:
@@ -71,7 +72,7 @@ ECCC API → getdata.sh → rawdata/{StationID}/*.csv
     → helper.R (combine CSVs, drop missing rows, type-convert, write Parquet)
     → data/{StationID}.parquet
     → app.R (lazy Arrow dataset, date-range filtered)
-    → Shiny UI (Surface Plot / Line Chart / Heat Map / Table)
+    → Shiny UI (Map / Surface Plot / Line Chart / Heat Map / Table)
 ```
 
 The app opens each station's Parquet file lazily via `arrow::open_dataset()` and only collects data after applying the selected date-range filter — no full dataset is loaded into memory.
@@ -83,4 +84,11 @@ The app opens each station's Parquet file lazily via `arrow::open_dataset()` and
 - **Column selector** — choose any numeric measurement column (e.g. temperature, dew point, wind speed)
 - **Date range picker** — restrict the view to any date range within the station's record
 - **Autoscale toggle** — fix the value axis range for consistent comparisons across date ranges
-- **Four tabs:** Surface Plot, Line Chart, Heat Map, Table
+- **Statistics table** — shown below each plot tab; compares summary statistics (N, Min, Max, Mean, SD, etc.) for the selected date range against the full station dataset
+- **Export data** — download the selected date range or full station dataset in CSV or Parquet format
+- **Five tabs:**
+  - **Map** — interactive leaflet map of all stations, colour-coded by province; click any marker to load that station; zoom to a province or territory with one click
+  - **Surface Plot** — 3D surface of the selected variable over time-of-day vs date
+  - **Line Chart** — hourly time series line plot
+  - **Heat Map** — heatmap of hour-of-day vs date
+  - **Table** — paginated, scrollable data table

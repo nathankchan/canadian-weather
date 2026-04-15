@@ -156,7 +156,9 @@ ui <- fluidPage(
       tags$head(
         tags$style(HTML(
           "#datehelp { color: grey; }
-          details.collapsible-section > summary { list-style: none; cursor: pointer; color: #428bca; }
+          details.collapsible-section > summary {
+            list-style: none; cursor: pointer; color: #428bca;
+          }
           details.collapsible-section > summary::-webkit-details-marker { display: none; }
           details.collapsible-section > summary:hover { text-decoration: underline; }
           details.collapsible-section > summary::before {

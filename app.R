@@ -10,6 +10,8 @@ library(arrow)
 library(leaflet)
 library(processx)
 
+source("pipeline.R", local = TRUE)
+
 # Runs a Shiny R app to interactively view Canadian historical weather data
 # by range
 
@@ -266,6 +268,28 @@ ui <- fluidPage(
         )
       ),
 
+      hr(style = "border-top: 1px dotted #808080;"),
+      tags$details(
+        class = "collapsible-section",
+        tags$summary(strong("Update data")),
+        div(
+          style = "display: flex; gap: 8px; margin-bottom: 8px; margin-top: 8px;",
+          actionButton(
+            "update_station",
+            label = "Update station",
+            class = "btn-sm btn-default",
+            icon = icon("refresh")
+          ),
+          actionButton(
+            "update_all",
+            label = "Update all data",
+            class = "btn-sm btn-warning",
+            icon = icon("download")
+          )
+        ),
+        uiOutput("update_status")
+      ),
+
       conditionalPanel(
         condition = "input.showhelp == true",
         hr(style = "border-top: 1px dotted #808080;"),
@@ -484,6 +508,12 @@ format_plot_title <- function(column, start_date, end_date) {
 server <- function(input, output, session) {
   current_dates <- reactiveVal(NULL)
   current_column <- reactiveVal(NULL)
+  data_version <- reactiveVal(0L)
+  update_proc <- reactiveVal(NULL)
+  update_target <- reactiveVal(NULL)
+  update_progress_file <- reactiveVal(NULL)
+  update_total <- reactiveVal(0L)
+  update_result <- reactiveVal(NULL)
 
   observeEvent(
     input$toggle_help,
@@ -499,7 +529,190 @@ server <- function(input, output, session) {
     ignoreInit = TRUE
   )
 
+  # --- Update station button ---
+  observeEvent(
+    input$update_station,
+    {
+      req(is.null(update_proc()))
+      sid <- station_id()
+      req(sid)
+      session$sendCustomMessage(
+        "setButtonDisabled",
+        list(id = "update_station", disabled = TRUE)
+      )
+      session$sendCustomMessage(
+        "setButtonDisabled",
+        list(id = "update_all", disabled = TRUE)
+      )
+      update_target("station")
+      update_result(NULL)
+      proc <- process$new(
+        command = "Rscript",
+        args = c(
+          "-e",
+          sprintf(
+            paste0(
+              "source('pipeline.R', local = TRUE); ",
+              "update_selected_station('%s')"
+            ),
+            sid
+          )
+        ),
+        stdout = "|",
+        stderr = "|"
+      )
+      update_proc(proc)
+    },
+    ignoreInit = TRUE
+  )
+
+  # --- Update all data button ---
+  observeEvent(
+    input$update_all,
+    {
+      req(is.null(update_proc()))
+      session$sendCustomMessage(
+        "setButtonDisabled",
+        list(id = "update_station", disabled = TRUE)
+      )
+      session$sendCustomMessage(
+        "setButtonDisabled",
+        list(id = "update_all", disabled = TRUE)
+      )
+      update_target("all")
+      update_result(NULL)
+      pf <- tempfile("update_progress_", fileext = ".txt")
+      writeLines("0", pf)
+      update_progress_file(pf)
+      update_total(nrow(stationlist))
+      proc <- process$new(
+        command = "Rscript",
+        args = c(
+          "-e",
+          sprintf(
+            paste0(
+              "source('pipeline.R', local = TRUE); ",
+              "update_all_stations(progress_file = '%s')"
+            ),
+            pf
+          )
+        ),
+        stdout = "|",
+        stderr = "|"
+      )
+      update_proc(proc)
+    },
+    ignoreInit = TRUE
+  )
+
+  # --- Poll for update completion ---
+  observe({
+    proc <- update_proc()
+    req(proc)
+    invalidateLater(1000)
+    if (!proc$is_alive()) {
+      exit_code <- proc$get_exit_status()
+      target <- update_target()
+      update_proc(NULL)
+      update_target(NULL)
+      pf <- update_progress_file()
+      if (!is.null(pf) && file.exists(pf)) {
+        unlink(pf)
+      }
+      update_progress_file(NULL)
+      update_total(0L)
+      session$sendCustomMessage(
+        "setButtonDisabled",
+        list(id = "update_station", disabled = FALSE)
+      )
+      session$sendCustomMessage(
+        "setButtonDisabled",
+        list(id = "update_all", disabled = FALSE)
+      )
+      if (identical(exit_code, 0L)) {
+        data_version(data_version() + 1L)
+        update_result(list(
+          status = "success",
+          message = if (target == "station") {
+            "Station updated successfully."
+          } else {
+            "All data updated successfully."
+          }
+        ))
+      } else {
+        stderr_out <- tryCatch(
+          proc$read_error_lines(),
+          error = function(e) ""
+        )
+        update_result(list(
+          status = "error",
+          message = paste("Update failed.", paste(stderr_out, collapse = " "))
+        ))
+      }
+    }
+  })
+
+  # --- Update status: single renderUI driven by reactive state ---
+  output$update_status <- renderUI({
+    proc <- update_proc()
+    result <- update_result()
+
+    # Running: show spinner (with progress for "all")
+    if (!is.null(proc)) {
+      invalidateLater(1000)
+      target <- update_target()
+      if (identical(target, "all")) {
+        pf <- update_progress_file()
+        total <- update_total()
+        completed <- 0L
+        if (!is.null(pf) && file.exists(pf)) {
+          content <- tryCatch(
+            readLines(pf, warn = FALSE),
+            error = function(e) ""
+          )
+          dots <- paste(content[-1], collapse = "")
+          completed <- nchar(dots)
+        }
+        pct <- if (total > 0L) round(100 * completed / total, 1) else 0
+        return(tags$span(
+          style = "color: grey; font-size: 0.85em;",
+          icon("spinner", class = "fa-spin"),
+          sprintf(
+            "Updating all data... %d/%d (%.1f%%) stations updated.",
+            completed,
+            total,
+            pct
+          )
+        ))
+      }
+      return(tags$span(
+        style = "color: grey; font-size: 0.85em;",
+        icon("spinner", class = "fa-spin"),
+        "Updating station..."
+      ))
+    }
+
+    # Finished: show result
+    if (!is.null(result)) {
+      if (identical(result$status, "success")) {
+        return(tags$span(
+          style = "color: green; font-size: 0.85em;",
+          icon("check"),
+          result$message
+        ))
+      }
+      return(tags$span(
+        style = "color: red; font-size: 0.85em;",
+        icon("exclamation-triangle"),
+        result$message
+      ))
+    }
+
+    NULL
+  })
+
   selected_data <- reactive({
+    data_version()
     req(input$station)
     open_dataset(paste0("./data/", input$station))
   })

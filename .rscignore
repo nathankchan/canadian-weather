@@ -1,0 +1,12 @@
+# Raw CSV data (offline pipeline only; app reads from data/*.parquet)
+rawdata
+
+# Dev tooling and editor config
+.vscode
+.github
+.lintr
+project_libraries.R
+
+# Documentation (not needed at runtime)
+README.md
+example1.png

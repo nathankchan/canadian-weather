@@ -1,0 +1,10 @@
+name: canadian-weather
+title:
+username: nathankchan
+account: nathankchan
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 6293665
+bundleId: 11856343
+url: https://nathankchan.shinyapps.io/canadian-weather/
+version: 1

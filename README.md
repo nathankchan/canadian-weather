@@ -40,18 +40,16 @@ renv::restore()
 
 ### 1. Build the data pipeline
 
-`run.sh` is the master build script. It:
+`pipeline.R` is the data pipeline script. It:
 
-1. Updates station metadata from the ECCC inventory (`update_stationlist.R`)
-2. Downloads raw hourly CSVs per station (`getdata.sh` via GNU `parallel`)
-3. Removes the current month's files so they are re-fetched on next run (`update.sh`)
-4. Checks for and deletes corrupted files (`removecorruptfiles.sh`)
-5. Re-downloads any missing or corrupted files
-6. Converts all CSVs to Parquet format (`helper.R`)
+1. Updates station metadata from the ECCC inventory
+2. Downloads raw hourly CSVs per station
+3. Removes stale and corrupted files
+4. Converts all CSVs to Parquet format
 
 ```sh
 cd {project_dir}
-bash run.sh
+Rscript pipeline.R
 ```
 
 > The initial download covers 960 stations and may take **several hours**. Subsequent runs only fetch new or updated files and complete in minutes.
@@ -68,8 +66,8 @@ Then open the printed URL (e.g. `http://127.0.0.1:{port}`) in a browser. Press `
 ## Data Flow
 
 ```
-ECCC API → getdata.sh → rawdata/{StationID}/*.csv
-    → helper.R (combine CSVs, drop missing rows, type-convert, write Parquet)
+ECCC API → pipeline.R → rawdata/{StationID}/*.csv
+    → pipeline.R (combine CSVs, drop missing rows, type-convert, write Parquet)
     → data/{StationID}.parquet
     → app.R (lazy Arrow dataset, date-range filtered)
     → Shiny UI (Map / Surface Plot / Line Chart / Heat Map / Table)
@@ -82,12 +80,14 @@ The app opens each station's Parquet file lazily via `arrow::open_dataset()` and
 - **Province / territory filter** — narrows the station list to a single province or territory, or shows all 960 stations
 - **Station selector** — choose any active ECCC station
 - **Column selector** — choose any numeric measurement column (e.g. temperature, dew point, wind speed)
-- **Date range picker** — restrict the view to any date range within the station's record
+- **Date range picker** — restrict the view to any date range within the station's record; six preset buttons (2 wks, 2 mos, 2 yrs, 10 yrs, 30 yrs, Max) or a custom date range / slider
 - **Autoscale toggle** — fix the value axis range for consistent comparisons across date ranges
 - **Statistics table** — shown below each plot tab; compares summary statistics (N, Min, Max, Mean, SD, etc.) for the selected date range against the full station dataset
 - **Export data** — download the selected date range or full station dataset in CSV or Parquet format
+- **Update source data** — update the selected station or all stations from ECCC directly within the app
+- **Help text toggle** — show or hide contextual help throughout the interface
 - **Five tabs:**
-  - **Map** — interactive leaflet map of all stations, colour-coded by province; click any marker to load that station; zoom to a province or territory with one click
+  - **Map** — interactive leaflet map of all stations, colour-coded by province; click any marker to load that station; zoom to a province or territory with one click; zoom to selected station or all stations
   - **Surface Plot** — 3D surface of the selected variable over time-of-day vs date
   - **Line Chart** — hourly time series line plot
   - **Heat Map** — heatmap of hour-of-day vs date

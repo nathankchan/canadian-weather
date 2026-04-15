@@ -83,8 +83,6 @@ ui <- fluidPage(
     sidebarPanel(
       width = 3,
 
-      p(ui_intro_text),
-
       div(
         style = "display: flex; gap: 8px; margin-bottom: 8px;",
         actionButton(
@@ -92,16 +90,15 @@ ui <- fluidPage(
           label = "Help text: ON",
           class = "btn-sm btn-default"
         ),
-        actionButton(
-          "refresh_data",
-          label = "Refresh source data",
-          class = "btn-sm btn-default"
-        )
       ),
-      uiOutput("refresh_status"),
       tags$div(
         style = "display:none;",
         checkboxInput("showhelp", label = NULL, value = TRUE)
+      ),
+
+      conditionalPanel(
+        condition = "input.showhelp == true",
+        p(ui_intro_text, style = "color: grey;")
       ),
 
       selectInput(
@@ -485,8 +482,6 @@ format_plot_title <- function(column, start_date, end_date) {
 server <- function(input, output, session) {
   current_dates <- reactiveVal(NULL)
   current_column <- reactiveVal(NULL)
-  refresh_proc <- reactiveVal(NULL)
-  refresh_complete <- reactiveVal(FALSE)
 
   observeEvent(
     input$toggle_help,
@@ -501,57 +496,6 @@ server <- function(input, output, session) {
     },
     ignoreInit = TRUE
   )
-
-  observeEvent(
-    input$refresh_data,
-    {
-      refresh_complete(FALSE)
-      session$sendCustomMessage(
-        "setButtonDisabled",
-        list(id = "refresh_data", disabled = TRUE)
-      )
-      refresh_proc(processx::process$new(
-        "bash",
-        args = c("./run.sh"),
-        stdout = "|",
-        stderr = "|"
-      ))
-    },
-    ignoreInit = TRUE
-  )
-
-  observe({
-    proc <- refresh_proc()
-    req(!is.null(proc))
-    if (proc$is_alive()) {
-      invalidateLater(2000, session)
-    } else {
-      refresh_proc(NULL)
-      refresh_complete(TRUE)
-      session$sendCustomMessage(
-        "setButtonDisabled",
-        list(id = "refresh_data", disabled = FALSE)
-      )
-    }
-  })
-
-  output$refresh_status <- renderUI({
-    if (!is.null(refresh_proc())) {
-      span(
-        icon("spinner", class = "fa-spin"),
-        " In progress...",
-        style = "color:grey; font-size:0.9em;"
-      )
-    } else if (isTRUE(refresh_complete())) {
-      span(
-        icon("check"),
-        " Refresh complete.",
-        style = "color:green; font-size:0.9em;"
-      )
-    } else {
-      NULL
-    }
-  })
 
   selected_data <- reactive({
     req(input$station)
@@ -898,7 +842,8 @@ server <- function(input, output, session) {
     firstdate <- format(as.POSIXct(date_range$min_date), "%Y-%m-%d")
     lastdate <- format(as.POSIXct(date_range$max_date), "%Y-%m-%d")
     out <- paste0(
-      "<p>Data are available from <i>",
+      "<p>Select the most recent data or specify a custom date range. ",
+      "Data are available from <i>",
       firstdate,
       "</i> to <i>",
       lastdate,
@@ -1058,12 +1003,36 @@ server <- function(input, output, session) {
 
       min_date <- as.POSIXct(dr$min_date)
       max_date <- as.POSIXct(dr$max_date)
-      new_start <- as.Date(max_date - 365 * 24 * 3600 * 2)
-      new_end <- as.Date(max_date)
+      station_min <- as.Date(min_date)
+      station_max <- as.Date(max_date)
+
+      # Retain current column if it exists in the new station; else default
+      prev_col <- current_column()
+      new_col <- if (!is.null(prev_col) && prev_col %in% numeric_cols) {
+        prev_col
+      } else {
+        "Temp (°C)"
+      }
+
+      # Retain current date range if it overlaps the new station; else default
+      prev_dates <- current_dates()
+      default_start <- as.Date(max_date - 365 * 24 * 3600 * 2)
+      default_end <- station_max
+      if (
+        !is.null(prev_dates) &&
+          prev_dates[1] <= station_max &&
+          prev_dates[2] >= station_min
+      ) {
+        new_start <- max(prev_dates[1], station_min)
+        new_end <- min(prev_dates[2], station_max)
+      } else {
+        new_start <- default_start
+        new_end <- default_end
+      }
 
       new_dates <- c(new_start, new_end)
-      if (!identical(current_column(), "Temp (°C)")) {
-        current_column("Temp (°C)")
+      if (!identical(current_column(), new_col)) {
+        current_column(new_col)
       }
       if (!identical(current_dates(), new_dates)) {
         current_dates(new_dates)
@@ -1074,7 +1043,7 @@ server <- function(input, output, session) {
         session = session,
         inputId = "selectedcolumn",
         choices = numeric_cols,
-        selected = "Temp (°C)"
+        selected = new_col
       )
       freezeReactiveValue(input, "dates")
       updateDateRangeInput(
@@ -1088,8 +1057,8 @@ server <- function(input, output, session) {
       updateSliderInput(
         session,
         "date_slider",
-        min = as.Date(min_date),
-        max = new_end,
+        min = station_min,
+        max = station_max,
         value = c(new_start, new_end)
       )
     },

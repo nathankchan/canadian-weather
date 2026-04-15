@@ -699,7 +699,13 @@ server <- function(input, output, session) {
             "<br>",
             current_column(),
             " for ",
-            station_info()$name
+            station_info()$name,
+            "<br>",
+            "<sup>",
+            format(current_dates()[1], "%Y-%b-%d"),
+            " to ",
+            format(current_dates()[2], "%Y-%b-%d"),
+            "</sup>"
           )
         ),
         scene = list(
@@ -730,6 +736,11 @@ server <- function(input, output, session) {
           current_column(),
           " for ",
           station_info()$name
+        ),
+        subtitle = paste0(
+          format(current_dates()[1], "%Y-%b-%d"),
+          " to ",
+          format(current_dates()[2], "%Y-%b-%d")
         )
       ) +
       theme_light()
@@ -775,6 +786,11 @@ server <- function(input, output, session) {
           current_column(),
           " for ",
           station_info()$name
+        ),
+        subtitle = paste0(
+          format(current_dates()[1], "%Y-%b-%d"),
+          " to ",
+          format(current_dates()[2], "%Y-%b-%d")
         )
       )
 

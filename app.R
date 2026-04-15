@@ -46,7 +46,24 @@ station_choices <- split(
 stationlist <- stationlist |>
   mutate(parquet_file = paste0(`Station ID`, ".parquet"))
 
-province_pal <- colorFactor(palette = "Set1", domain = stationlist$Province)
+province_pal <- colorFactor(
+  palette = c(
+    "#E41A1C",
+    "#377EB8",
+    "#4DAF4A",
+    "#984EA3",
+    "#FF7F00",
+    "#A65628",
+    "#F781BF",
+    "#999999",
+    "#66C2A5",
+    "#FC8D62",
+    "#8DA0CB",
+    "#E78AC3",
+    "#A6D854"
+  ),
+  domain = stationlist$Province
+)
 
 exclude_cols <- c("Longitude (x)", "Latitude (y)", "Climate ID", "Year")
 
@@ -556,7 +573,7 @@ server <- function(input, output, session) {
     req(dates)
     start_posix <- as.POSIXct(dates[1])
     end_posix <- as.POSIXct(dates[2] + 1L)
-    isolate(selected_data()) |>
+    selected_data() |>
       filter(
         `Date/Time (LST)` >= start_posix,
         `Date/Time (LST)` < end_posix
@@ -681,9 +698,8 @@ server <- function(input, output, session) {
           text = paste0(
             "<br>",
             current_column(),
-            "<br>(",
-            format_date_range(current_dates()[1], current_dates()[2]),
-            ")"
+            " for ",
+            station_info()$name
           )
         ),
         scene = list(
@@ -712,11 +728,8 @@ server <- function(input, output, session) {
         y = current_column(),
         title = paste0(
           current_column(),
-          " (",
-          current_dates()[1] |> format("%Y-%b-%d"),
-          " to ",
-          current_dates()[2] |> format("%Y-%b-%d"),
-          ")"
+          " for ",
+          station_info()$name
         )
       ) +
       theme_light()
@@ -733,10 +746,9 @@ server <- function(input, output, session) {
 
     plot_out <- ggplot(
       data = plot_data,
-      aes(x = as.Date(Date), y = Hour)
-    ) +
-      geom_tile(aes(
-        fill = Value,
+      aes(
+        x = as.Date(Date),
+        y = Hour,
         text = paste0(
           "Date: ",
           format(as.Date(Date), "%Y-%b-%d"),
@@ -746,7 +758,9 @@ server <- function(input, output, session) {
           "<br>Value: ",
           Value
         )
-      )) +
+      )
+    ) +
+      geom_tile(aes(fill = Value)) +
       scale_x_date(date_labels = "%Y-%b-%d") +
       scale_y_continuous(
         n.breaks = 13,
@@ -759,11 +773,8 @@ server <- function(input, output, session) {
         fill = current_column(),
         title = paste0(
           current_column(),
-          " (",
-          current_dates()[1] |> format("%Y-%b-%d"),
-          " to ",
-          current_dates()[2] |> format("%Y-%b-%d"),
-          ")"
+          " for ",
+          station_info()$name
         )
       )
 
@@ -886,7 +897,7 @@ server <- function(input, output, session) {
       addCircleMarkers(
         lng = ~`Longitude (Decimal Degrees)`,
         lat = ~`Latitude (Decimal Degrees)`,
-        color = ~ province_pal(Province),
+        fillColor = ~ province_pal(Province),
         radius = 6,
         stroke = FALSE,
         fillOpacity = 0.8,
@@ -902,7 +913,8 @@ server <- function(input, output, session) {
         position = "bottomright",
         pal = province_pal,
         values = ~Province,
-        title = "Province / Territory"
+        title = "Province / Territory",
+        opacity = 0.8
       ) |>
       fitBounds(
         min(stationlist$`Longitude (Decimal Degrees)`),

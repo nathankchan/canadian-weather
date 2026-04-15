@@ -6,6 +6,10 @@ on:
     - cron: "0 6 * * *"
   workflow_dispatch: # Allow manual trigger
 
+concurrency:
+  group: daily-refresh
+  cancel-in-progress: false
+
 jobs:
   refresh-and-deploy:
     runs-on: ubuntu-latest
@@ -16,13 +20,20 @@ jobs:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     steps:
+      - name: Validate secrets
+        run: |
+          if [[ -z "${{ secrets.SHINYAPPS_TOKEN }}" || -z "${{ secrets.SHINYAPPS_SECRET }}" ]]; then
+            echo "::error::Missing SHINYAPPS_TOKEN or SHINYAPPS_SECRET repository secrets"
+            exit 1
+          fi
+
       - name: Checkout repository
         uses: actions/checkout@v6
 
       - name: Set up R
         uses: r-lib/actions/setup-r@v2
         with:
-          r-version: "4.5.3"
+          r-version: renv
 
       - name: Install system dependencies
         run: |
@@ -49,10 +60,26 @@ jobs:
           key: rawdata-${{ hashFiles('stationlist.csv') }}
           restore-keys: rawdata-
 
+      - name: Checksum before pipeline
+        run: find data -name '*.parquet' -exec md5sum {} + | sort > /tmp/before.md5 || true
+
       - name: Run data pipeline
         run: Rscript pipeline.R
 
+      - name: Check for data changes
+        id: diff
+        run: |
+          find data -name '*.parquet' -exec md5sum {} + | sort > /tmp/after.md5
+          if diff -q /tmp/before.md5 /tmp/after.md5 > /dev/null 2>&1; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No data changes detected — skipping deploy"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "Data changes detected — will deploy"
+          fi
+
       - name: Deploy to shinyapps.io
+        if: steps.diff.outputs.changed == 'true'
         env:
           SHINYAPPS_NAME: ${{ secrets.SHINYAPPS_NAME }}
           SHINYAPPS_TOKEN: ${{ secrets.SHINYAPPS_TOKEN }}

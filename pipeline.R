@@ -302,6 +302,10 @@ update_all_stations <- function(
     writeLines(paste0("0/", total), progress_file)
   }
 
+  # File-based counter for progress reporting across parallel workers
+  counter_file <- tempfile("pipeline_counter_")
+  file.create(counter_file)
+
   errors <- mclapply(
     seq_len(total),
     function(i) {
@@ -313,7 +317,16 @@ update_all_stations <- function(
         outdir = outdir,
         emptycol = emptycol
       )
-      # Append a line to signal completion of one station
+      # Append a byte to counter file and report progress
+      cat(".", file = counter_file, append = TRUE)
+      completed <- file.size(counter_file)
+      pct <- round(100 * completed / total, 1)
+      cat(sprintf(
+        "%d/%d (%.1f%%) stations updated\n",
+        completed,
+        total,
+        pct
+      ))
       if (!is.null(progress_file)) {
         cat(".", file = progress_file, append = TRUE)
       }
@@ -322,6 +335,8 @@ update_all_stations <- function(
     mc.cores = n_cores,
     mc.preschedule = FALSE
   )
+
+  unlink(counter_file)
 
   failed_idx <- which(!vapply(errors, is.null, logical(1)))
   if (length(failed_idx) > 0L) {

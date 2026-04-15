@@ -41,6 +41,13 @@ jobs:
           renv::restore()
         shell: Rscript {0}
 
+      - name: Cache raw CSV data
+        uses: actions/cache@v4
+        with:
+          path: rawdata
+          key: rawdata-${{ hashFiles('stationlist.csv') }}
+          restore-keys: rawdata-
+
       - name: Run data pipeline
         run: Rscript pipeline.R
 

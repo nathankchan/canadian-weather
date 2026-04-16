@@ -1,4 +1,5 @@
 # app.R
+# Shiny R app to interactively view Canadian historical weather data by range.
 
 library(tidyverse)
 library(plotly)
@@ -12,8 +13,9 @@ library(processx)
 
 source("pipeline.R", local = TRUE)
 
-# Runs a Shiny R app to interactively view Canadian historical weather data
-# by range
+# ---------------------------------------------------------------------------
+# Station metadata & UI text
+# ---------------------------------------------------------------------------
 
 expand_station_name <- function(name) {
   name |>
@@ -78,6 +80,10 @@ ui_zaxis_help_text <- paste0(
   " Values below describe the maximum and minimum for the data displayed."
 )
 
+# ---------------------------------------------------------------------------
+# UI
+# ---------------------------------------------------------------------------
+
 ui <- fluidPage(
   titlePanel("Canadian Historical Weather Data"),
 
@@ -91,7 +97,7 @@ ui <- fluidPage(
           "toggle_help",
           label = "Help text: ON",
           class = "btn-sm btn-default"
-        ),
+        )
       ),
       tags$div(
         style = "display:none;",
@@ -404,6 +410,9 @@ ui <- fluidPage(
   )
 )
 
+# ---------------------------------------------------------------------------
+# Server helpers
+# ---------------------------------------------------------------------------
 
 compute_stats <- function(vec) {
   n_total <- length(vec)
@@ -504,6 +513,9 @@ format_plot_title <- function(column, start_date, end_date) {
   paste0(column, " (", format_date_range(start_date, end_date), ")")
 }
 
+# ---------------------------------------------------------------------------
+# Server
+# ---------------------------------------------------------------------------
 
 server <- function(input, output, session) {
   current_dates <- reactiveVal(NULL)
@@ -820,7 +832,7 @@ server <- function(input, output, session) {
     )
     plot_zaxis <- list(title = current_column())
 
-    if (input$autozaxis == FALSE) {
+    if (!isTRUE(as.logical(input$autozaxis))) {
       plot_zaxis$range <- c(input$zaxislimits[1], input$zaxislimits[2])
     }
 
@@ -904,11 +916,11 @@ server <- function(input, output, session) {
       ) +
       theme_light()
 
-    if (input$autozaxis == FALSE) {
+    if (!isTRUE(as.logical(input$autozaxis))) {
       plot_out <- plot_out + ylim(input$zaxislimits)
     }
 
-    return(ggplotly(plot_out))
+    ggplotly(plot_out)
   })
 
   output$displayheat <- renderPlotly({
@@ -953,7 +965,7 @@ server <- function(input, output, session) {
         )
       )
 
-    if (input$autozaxis == FALSE) {
+    if (!isTRUE(as.logical(input$autozaxis))) {
       plot_out <- plot_out +
         scale_fill_viridis_c(limits = input$zaxislimits) +
         theme_light()
@@ -963,7 +975,7 @@ server <- function(input, output, session) {
         theme_light()
     }
 
-    return(ggplotly(plot_out, tooltip = "text"))
+    ggplotly(plot_out, tooltip = "text")
   })
 
   output$displaytable <- renderDT({
@@ -1056,7 +1068,7 @@ server <- function(input, output, session) {
       collect()
     firstdate <- format(as.POSIXct(date_range$min_date), "%Y-%m-%d")
     lastdate <- format(as.POSIXct(date_range$max_date), "%Y-%m-%d")
-    out <- paste0(
+    paste0(
       "<p>Select the most recent data or specify a custom date range. ",
       "Data are available from <i>",
       firstdate,
@@ -1064,7 +1076,6 @@ server <- function(input, output, session) {
       lastdate,
       "</i>.</p>"
     )
-    return(out)
   })
 
   output$displaymap <- renderLeaflet({
@@ -1115,7 +1126,7 @@ server <- function(input, output, session) {
     selected_row <- stationlist[
       paste0(stationlist$`Station ID`, ".parquet") == input$station,
     ]
-    if (nrow(selected_row) > 0) {
+    if (nrow(selected_row) > 0L) {
       leafletProxy("displaymap") |>
         setView(
           lng = selected_row$`Longitude (Decimal Degrees)`[1],
@@ -1131,7 +1142,7 @@ server <- function(input, output, session) {
       selected_row <- stationlist[
         paste0(stationlist$`Station ID`, ".parquet") == input$station,
       ]
-      if (nrow(selected_row) > 0) {
+      if (nrow(selected_row) > 0L) {
         leafletProxy("displaymap") |>
           setView(
             lng = selected_row$`Longitude (Decimal Degrees)`[1],
@@ -1166,7 +1177,7 @@ server <- function(input, output, session) {
     click <- input$displaymap_marker_click
     req(click)
     clicked_row <- stationlist[stationlist$parquet_file == click$id, ]
-    req(nrow(clicked_row) == 1)
+    req(nrow(clicked_row) == 1L)
     if (input$province == clicked_row$Province) {
       # Province is already correct — station choices are already populated,
       # so update the station directly without touching the province dropdown.
@@ -1330,12 +1341,14 @@ server <- function(input, output, session) {
     ignoreInit = TRUE
   )
 
+  # `by = NULL` means "jump to the earliest available date" (preset_max).
   preset_configs <- list(
     list(id = "preset_2w", by = "-2 weeks"),
     list(id = "preset_2m", by = "-2 months"),
     list(id = "preset_2y", by = "-2 years"),
     list(id = "preset_10y", by = "-10 years"),
-    list(id = "preset_30y", by = "-30 years")
+    list(id = "preset_30y", by = "-30 years"),
+    list(id = "preset_max", by = NULL)
   )
 
   lapply(preset_configs, function(cfg) {
@@ -1349,11 +1362,15 @@ server <- function(input, output, session) {
           dr <- full_date_range()
           station_max <- as.Date(as.POSIXct(dr$max_date))
           station_min <- as.Date(as.POSIXct(dr$min_date))
-          preset_start <- seq(station_max, by = by, length.out = 2)[2]
+          start <- if (is.null(by)) {
+            station_min
+          } else {
+            max(station_min, seq(station_max, by = by, length.out = 2)[2])
+          }
           updateDateRangeInput(
             session,
             "dates",
-            start = max(station_min, preset_start),
+            start = start,
             end = station_max
           )
         },
@@ -1363,45 +1380,22 @@ server <- function(input, output, session) {
     })
   })
 
-  observeEvent(
-    input$preset_max,
-    {
-      req(input$station)
-      dr <- full_date_range()
-      updateDateRangeInput(
-        session,
-        "dates",
-        start = as.Date(as.POSIXct(dr$min_date)),
-        end = as.Date(as.POSIXct(dr$max_date))
-      )
-    },
-    ignoreNULL = TRUE,
-    ignoreInit = TRUE
-  )
-
   observe({
     dr <- full_date_range()
     station_max <- as.Date(as.POSIXct(dr$max_date))
     station_min <- as.Date(as.POSIXct(dr$min_date))
 
-    preset_starts <- list(
-      preset_2w = seq(station_max, by = "-2 weeks", length.out = 2)[2],
-      preset_2m = seq(station_max, by = "-2 months", length.out = 2)[2],
-      preset_2y = seq(station_max, by = "-2 years", length.out = 2)[2],
-      preset_10y = seq(station_max, by = "-10 years", length.out = 2)[2],
-      preset_30y = seq(station_max, by = "-30 years", length.out = 2)[2]
-    )
-
-    for (id in names(preset_starts)) {
+    for (cfg in preset_configs) {
+      disabled <- if (is.null(cfg$by)) {
+        FALSE
+      } else {
+        seq(station_max, by = cfg$by, length.out = 2)[2] < station_min
+      }
       session$sendCustomMessage(
         "setButtonDisabled",
-        list(id = id, disabled = preset_starts[[id]] < station_min)
+        list(id = cfg$id, disabled = disabled)
       )
     }
-    session$sendCustomMessage(
-      "setButtonDisabled",
-      list(id = "preset_max", disabled = FALSE)
-    )
   })
 
   observeEvent(
@@ -1509,5 +1503,8 @@ server <- function(input, output, session) {
   )
 }
 
+# ---------------------------------------------------------------------------
+# App
+# ---------------------------------------------------------------------------
 
 shinyApp(ui, server)

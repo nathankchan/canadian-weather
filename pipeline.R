@@ -8,6 +8,7 @@ suppressPackageStartupMessages({
   library(arrow)
   library(parallel)
   library(curl)
+  library(data.table)
 })
 
 # ---------------------------------------------------------------------------
@@ -134,14 +135,22 @@ combine_csv <- function(dirname) {
   if (length(csv_files) == 0L) {
     stop("No CSV files found in ", dirname)
   }
-  data_list <- lapply(csv_files, function(x) {
-    read_csv(
-      x,
-      col_types = cols(.default = col_character()),
-      show_col_types = FALSE
+  data_list <- lapply(csv_files, function(f) {
+    d <- fread(
+      f,
+      sep = ",",
+      skip = "Longitude (x)",   # pin header; ECCC files have BOM + stub rows
+      fill = TRUE,              # pad short stub rows with NA
+      colClasses = "character",
+      showProgress = FALSE,
+      data.table = FALSE
     )
+    # fread keeps quoted "" as empty strings even under na.strings; normalize
+    # to NA to match read_csv's default so remove_empty_rows filters correctly
+    d[] <- lapply(d, function(col) replace(col, !is.na(col) & col == "", NA))
+    d
   })
-  bind_rows(data_list)
+  as_tibble(rbindlist(data_list, fill = TRUE))
 }
 
 remove_empty_rows <- function(x, col) {

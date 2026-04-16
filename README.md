@@ -14,7 +14,7 @@ This project is an interactive Shiny web application for exploring historical ho
 
 Browse the data through five views: **Map**, **Surface Plot**, **Line Chart**, **Heat Map**, and **Table**.
 
-<center><img src="demo.gif" width="75%"/></center>
+![Demo of the Canadian Historical Weather Data app](demo.gif)
 
 ## Requirements
 
@@ -65,7 +65,7 @@ Then open the printed URL (e.g. `http://127.0.0.1:{port}`) in a browser. Press `
 
 ## Data Flow
 
-```
+```text
 ECCC API → pipeline.R → rawdata/{StationID}/*.csv
     → pipeline.R (combine CSVs, drop missing rows, type-convert, write Parquet)
     → data/{StationID}.parquet

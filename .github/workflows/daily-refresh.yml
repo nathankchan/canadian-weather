@@ -21,20 +21,13 @@ jobs:
     steps:
       - name: Validate secrets
         run: |
-          if [[ -z "${{ secrets.SHINYAPPS_TOKEN }}" || -z "${{ secrets.SHINYAPPS_SECRET }}" ]]; then
-            echo "::error::Missing SHINYAPPS_TOKEN or SHINYAPPS_SECRET repository secrets"
+          if [[ -z "${{ secrets.SHINYAPPS_NAME }}" || -z "${{ secrets.SHINYAPPS_TOKEN }}" || -z "${{ secrets.SHINYAPPS_SECRET }}" ]]; then
+            echo "::error::Missing SHINYAPPS_NAME, SHINYAPPS_TOKEN, or SHINYAPPS_SECRET repository secrets"
             exit 1
           fi
 
       - name: Checkout repository
         uses: actions/checkout@v6
-
-      - name: Read R version from renv.lock
-        id: rversion
-        run: |
-          R_VERSION=$(grep -A1 '"R"' renv.lock | grep '"Version"' | sed 's/.*: "\(.*\)".*/\1/')
-          echo "version=$R_VERSION" >> "$GITHUB_OUTPUT"
-          echo "Installing R $R_VERSION"
 
       - name: Set up R
         run: |
@@ -63,8 +56,15 @@ jobs:
         uses: actions/cache@v5
         with:
           path: rawdata
-          key: rawdata-${{ hashFiles('stationlist.csv') }}
+          key: rawdata-${{ github.run_id }}
           restore-keys: rawdata-
+
+      - name: Cache parquet data
+        uses: actions/cache@v5
+        with:
+          path: data
+          key: parquet-${{ github.run_id }}
+          restore-keys: parquet-
 
       - name: Checksum before pipeline
         run: find data -name '*.parquet' -exec md5sum {} + | sort > /tmp/before.md5 || true

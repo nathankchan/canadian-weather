@@ -14,7 +14,7 @@ This project is an interactive Shiny web application for exploring historical ho
 
 Browse the data through five views: **Map**, **Surface Plot**, **Line Chart**, **Heat Map**, and **Table**.
 
-<center><img src="example1.png" width="75%"/></center>
+<center><img src="demo.gif" width="75%"/></center>
 
 ## Requirements
 

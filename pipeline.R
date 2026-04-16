@@ -44,21 +44,28 @@ download_station_csvs <- function(
   }
 
   # Build the full set of (url, destfile) pairs, skipping already-present files
-  years     <- rep(seq(as.integer(start_year), as.integer(end_year)), each = 12L)
-  months    <- rep(seq_len(12L), times = as.integer(end_year) - as.integer(start_year) + 1L)
+  years <- rep(seq(as.integer(start_year), as.integer(end_year)), each = 12L)
+  months <- rep(
+    seq_len(12L),
+    times = as.integer(end_year) - as.integer(start_year) + 1L
+  )
   destfiles <- file.path(station_dir, sprintf("%d_%02d.csv", years, months))
-  urls      <- mapply(eccc_csv_url, station_id, years, months, SIMPLIFY = TRUE)
+  urls <- mapply(eccc_csv_url, station_id, years, months, SIMPLIFY = TRUE)
 
   missing <- !file.exists(destfiles)
-  if (!any(missing)) return(character(0))
+  if (!any(missing)) {
+    return(character(0))
+  }
 
   # Download all missing files concurrently
-  results   <- multi_download(urls[missing], destfiles[missing], progress = FALSE)
+  results <- multi_download(urls[missing], destfiles[missing], progress = FALSE)
   succeeded <- !is.na(results$success) & results$success
 
   # Clean up any partial files from failed transfers
   failed_files <- results$destfile[!succeeded]
-  if (length(failed_files) > 0L) unlink(failed_files[file.exists(failed_files)])
+  if (length(failed_files) > 0L) {
+    unlink(failed_files[file.exists(failed_files)])
+  }
 
   results$destfile[succeeded]
 }
@@ -103,25 +110,32 @@ remove_stale_files <- function(station_id, rawdata_dir = "./rawdata") {
     return(character(0))
   }
 
-  now  <- Sys.time()
-  bns  <- basename(files)
-  m    <- regmatches(bns, regexec("^(\\d{4})_(\\d{2})\\.csv$", bns))
+  now <- Sys.time()
+  bns <- basename(files)
+  m <- regmatches(bns, regexec("^(\\d{4})_(\\d{2})\\.csv$", bns))
   valid <- lengths(m) == 3L
-  if (!any(valid)) return(character(0))
+  if (!any(valid)) {
+    return(character(0))
+  }
 
   valid_files <- files[valid]
-  years  <- as.integer(vapply(m[valid], `[[`, character(1L), 2L))
+  years <- as.integer(vapply(m[valid], `[[`, character(1L), 2L))
   months <- as.integer(vapply(m[valid], `[[`, character(1L), 3L))
 
   file_dates <- as.POSIXct(sprintf("%04d-%02d-01", years, months), tz = "UTC")
 
-  next_year  <- ifelse(months == 12L, years + 1L, years)
+  next_year <- ifelse(months == 12L, years + 1L, years)
   next_month <- ifelse(months == 12L, 1L, months + 1L)
-  month_ends <- as.POSIXct(sprintf("%04d-%02d-01", next_year, next_month), tz = "UTC")
+  month_ends <- as.POSIXct(
+    sprintf("%04d-%02d-01", next_year, next_month),
+    tz = "UTC"
+  )
 
-  mtimes <- file.mtime(valid_files)   # single vectorised syscall
-  stale  <- valid_files[now > file_dates & mtimes < month_ends]
-  if (length(stale) > 0L) unlink(stale)
+  mtimes <- file.mtime(valid_files) # single vectorised syscall
+  stale <- valid_files[now > file_dates & mtimes < month_ends]
+  if (length(stale) > 0L) {
+    unlink(stale)
+  }
   stale
 }
 
@@ -139,8 +153,8 @@ combine_csv <- function(dirname) {
     d <- fread(
       f,
       sep = ",",
-      skip = "Longitude (x)",   # pin header; ECCC files have BOM + stub rows
-      fill = TRUE,              # pad short stub rows with NA
+      skip = "Longitude (x)", # pin header; ECCC files have BOM + stub rows
+      fill = TRUE, # pad short stub rows with NA
       colClasses = "character",
       showProgress = FALSE,
       data.table = FALSE
@@ -311,23 +325,39 @@ update_all_stations <- function(
   errors <- mclapply(
     seq_len(total),
     function(i) {
+      sid <- sl$`Station ID`[i]
+      sname <- sl$Name[i]
       result <- update_station(
-        station_id = sl$`Station ID`[i],
+        station_id = sid,
         start_year = sl$`HLY First Year`[i],
         end_year = sl$`HLY Last Year`[i],
         rawdata_dir = rawdata_dir,
         outdir = outdir,
         emptycol = emptycol
       )
+      # Get most recent data date from the updated parquet
+      latest_date <- tryCatch(
+        {
+          open_dataset(file.path(outdir, paste0(sid, ".parquet"))) |>
+            summarise(max_date = max(`Date/Time (LST)`, na.rm = TRUE)) |>
+            collect() |>
+            pull(max_date) |>
+            as.character()
+        },
+        error = function(e) "N/A"
+      )
       # Append a byte to counter file and report progress
       cat(".", file = counter_file, append = TRUE)
       completed <- file.size(counter_file)
       pct <- round(100 * completed / total, 1)
       cat(sprintf(
-        "%d/%d (%.1f%%) stations updated\n",
+        "%d/%d (%.1f%%) stations updated — Station %s (%s), latest: %s\n",
         completed,
         total,
-        pct
+        pct,
+        sid,
+        sname,
+        latest_date
       ))
       if (!is.null(progress_file)) {
         cat(".", file = progress_file, append = TRUE)

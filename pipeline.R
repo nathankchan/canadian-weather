@@ -42,29 +42,24 @@ download_station_csvs <- function(
     dir.create(station_dir, recursive = TRUE)
   }
 
-  downloaded <- character(0)
-  for (year in seq(as.integer(start_year), as.integer(end_year))) {
-    for (month in seq_len(12)) {
-      filename <- sprintf("%d_%02d.csv", year, month)
-      destfile <- file.path(station_dir, filename)
+  # Build the full set of (url, destfile) pairs, skipping already-present files
+  years     <- rep(seq(as.integer(start_year), as.integer(end_year)), each = 12L)
+  months    <- rep(seq_len(12L), times = as.integer(end_year) - as.integer(start_year) + 1L)
+  destfiles <- file.path(station_dir, sprintf("%d_%02d.csv", years, months))
+  urls      <- mapply(eccc_csv_url, station_id, years, months, SIMPLIFY = TRUE)
 
-      if (file.exists(destfile)) {
-        next
-      }
+  missing <- !file.exists(destfiles)
+  if (!any(missing)) return(character(0))
 
-      url <- eccc_csv_url(station_id, year, month)
-      tryCatch(
-        {
-          curl_download(url, destfile, quiet = TRUE)
-          downloaded <- c(downloaded, destfile)
-        },
-        error = function(e) {
-          if (file.exists(destfile)) unlink(destfile)
-        }
-      )
-    }
-  }
-  downloaded
+  # Download all missing files concurrently
+  results   <- multi_download(urls[missing], destfiles[missing], progress = FALSE)
+  succeeded <- !is.na(results$success) & results$success
+
+  # Clean up any partial files from failed transfers
+  failed_files <- results$destfile[!succeeded]
+  if (length(failed_files) > 0L) unlink(failed_files[file.exists(failed_files)])
+
+  results$destfile[succeeded]
 }
 
 # ---------------------------------------------------------------------------
@@ -107,28 +102,26 @@ remove_stale_files <- function(station_id, rawdata_dir = "./rawdata") {
     return(character(0))
   }
 
-  removed <- character(0)
-  now <- Sys.time()
+  now  <- Sys.time()
+  bns  <- basename(files)
+  m    <- regmatches(bns, regexec("^(\\d{4})_(\\d{2})\\.csv$", bns))
+  valid <- lengths(m) == 3L
+  if (!any(valid)) return(character(0))
 
-  for (f in files) {
-    bn <- basename(f)
-    parts <- regmatches(bn, regexec("^(\\d{4})_(\\d{2})\\.csv$", bn))[[1]]
-    if (length(parts) != 3L) {
-      next
-    }
+  valid_files <- files[valid]
+  years  <- as.integer(vapply(m[valid], `[[`, character(1L), 2L))
+  months <- as.integer(vapply(m[valid], `[[`, character(1L), 3L))
 
-    year <- as.integer(parts[2])
-    month <- as.integer(parts[3])
+  file_dates <- as.POSIXct(sprintf("%04d-%02d-01", years, months), tz = "UTC")
 
-    file_date <- as.POSIXct(sprintf("%d-%02d-01", year, month), tz = "UTC")
-    month_end <- seq(file_date, by = "1 month", length.out = 2)[2]
+  next_year  <- ifelse(months == 12L, years + 1L, years)
+  next_month <- ifelse(months == 12L, 1L, months + 1L)
+  month_ends <- as.POSIXct(sprintf("%04d-%02d-01", next_year, next_month), tz = "UTC")
 
-    if (now > file_date && file.mtime(f) < month_end) {
-      unlink(f)
-      removed <- c(removed, f)
-    }
-  }
-  removed
+  mtimes <- file.mtime(valid_files)   # single vectorised syscall
+  stale  <- valid_files[now > file_dates & mtimes < month_ends]
+  if (length(stale) > 0L) unlink(stale)
+  stale
 }
 
 # ---------------------------------------------------------------------------

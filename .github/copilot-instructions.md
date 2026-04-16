@@ -16,7 +16,7 @@ Interactive Shiny web application for visualizing historical hourly weather data
 
 ## Data Flow
 
-```
+```text
 ECCC API → pipeline.R → rawdata/{StationID}/*.csv
     → pipeline.R (combine CSVs, remove empty rows, type-convert, write Parquet)
     → data/{StationID}.parquet
